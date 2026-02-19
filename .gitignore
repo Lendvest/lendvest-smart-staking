@@ -1,0 +1,12 @@
+# Compiler files
+cache/
+out/
+
+# Deployment broadcast logs
+broadcast/
+
+# Node.js
+node_modules/
+
+# Environment
+.env
