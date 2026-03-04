@@ -100,12 +100,6 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     event AaveCLWithdrawn(address user, uint256 amount, uint256 epoch);
     event AaveLenderDeposited(uint256 epoch, uint256 totalAmount, uint256 userCount);
     event AaveLenderWithdrawn(address user, uint256 amount, uint256 epoch);
-    event AaveLenderEpochCloseWithdrawn(uint256 epoch, uint256 totalWithdrawn);
-    event AaveCLEpochCloseWithdrawn(uint256 epoch, uint256 totalWithdrawn);
-    event EmergencyAaveLenderEpochWithdrawn(uint256 epoch, uint256 principal, uint256 totalWithdrawn);
-    event EmergencyAaveCLEpochWithdrawn(uint256 epoch, uint256 principal, uint256 totalWithdrawn);
-    event EmergencyAaveLenderClaimed(address user, uint256 epoch, uint256 principal, uint256 amount);
-    event EmergencyAaveCLClaimed(address user, uint256 epoch, uint256 principal, uint256 amount);
 
     /**
      * @notice Constructor
@@ -135,10 +129,14 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     }
 
     modifier lock() {
-        if (locked) revert VaultLib.ReentrantCall();
-        locked = true;
+        _lock();
         _;
         locked = false;
+    }
+
+    function _lock() internal {
+        if (locked) revert VaultLib.ReentrantCall();
+        locked = true;
     }
 
     /**
@@ -148,23 +146,16 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
      *      custom authorization (e.g., wethToWsteth) to determine if they need the same update
      */
     modifier onlyProxy() {
-        if (msg.sender != LVLidoVaultUtil && msg.sender != address(liquidationProxy) && msg.sender != LVLidoVaultUpkeeper) {
-            revert VaultLib.OnlyProxy();
-        }
+        _onlyProxy();
         _;
     }
 
-    function maxFundsLimiter(uint256 quoteAmount, uint256 collateralAmount) public view returns (bool) {
-        uint256 wethPrice = 2430;
-        uint256 wstethPrice = (wethPrice * wsteth.stEthPerToken()) / 1e18;
-        // Fetch total existing lender amounts, also consider the value of the vault shares (in WETH)
-        uint256 totalQT =
-                        quoteAmount + totalLenderQTUtilized + totalLenderQTUnutilized + getAaveBalanceQuote();
-        // Fetch total existing borrower amounts (in WSTETH)
-        uint256 totalCT = collateralAmount + totalBorrowerCT + totalCLDepositsUtilized + totalCLDepositsUnutilized;
-        uint256 totalValue = ((totalQT * wethPrice) / 1e18) + ((totalCT * wstethPrice) / 1e18);
-        return totalValue <= 10000;
+    function _onlyProxy() internal view {
+        if (msg.sender != LVLidoVaultUtil && msg.sender != address(liquidationProxy) && msg.sender != LVLidoVaultUpkeeper) {
+            revert VaultLib.OnlyProxy();
+        }
     }
+
 
     /**
      * @notice Converts WETH to WSTETH through a series of token conversions
@@ -911,249 +902,79 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         emit VaultLib.EndEpoch(lastEpochEnd);
     }
 
+    // ============================================================
+    // Thin execution wrappers — logic moved to LVLidoVaultUtil (emergency)
+    // and LVLidoVaultUpkeeper (epoch-close Aave withdrawal loops).
+    // ============================================================
+
     /**
-     * @notice Withdraws all Aave deposits (lender + CL) back to the vault at epoch close.
-     * @dev Called by LVLidoVaultUpkeeper.closeEpoch() BEFORE _processMatchesAndCreateOrders().
-     * @dev This ensures Aave deposits are scoped to a single epoch and never strand across epoch boundaries.
-     * @dev For lenders: restores quoteAmount (was zeroed during deposit) with principal + proportional interest.
-     * @dev For CLs: adds proportional interest to existing collateralAmount (was NOT zeroed during deposit).
+     * @notice Executes an Aave V3 withdrawal on behalf of a proxy caller.
+     * @dev The vault holds aTokens, so only the vault can call aaveV3Pool.withdraw().
      */
-    function withdrawAllAaveDepositsForEpochClose() external onlyProxy {
-        // === Lender Aave Deposits ===
-        if (totalAaveLenderDeposits > 0) {
-            uint256 aaveBalanceQuote = getAaveBalanceQuote();
-            uint256 withdrawnLender = aaveV3Pool.withdraw(
-                VaultLib.QUOTE_TOKEN,
-                aaveBalanceQuote,
-                address(this)
-            );
-
-            uint256 depositedLender = totalAaveLenderDeposits;
-
-            // Restore each lender order's quoteAmount with their proportional share (principal + interest).
-            // quoteAmount was zeroed during depositUnmatchedLendersToAave(), so assign the full share.
-            // userAaveLenderDeposits[user][epoch] is cleared after first hit to avoid double-processing
-            // when a user has multiple orders (withdrawal aggregates all orders per user anyway).
-            for (uint256 i = 0; i < lenderOrders.length; i++) {
-                address user = lenderOrders[i].lender;
-                uint256 userDeposit = userAaveLenderDeposits[user][epoch];
-                if (userDeposit > 0) {
-                    uint256 userShare = (userDeposit * withdrawnLender) / depositedLender;
-                    lenderOrders[i].quoteAmount = userShare;
-                    userAaveLenderDeposits[user][epoch] = 0;
-                }
-            }
-
-            totalLenderQTUnutilized += withdrawnLender;
-            epochToAaveLenderDeposits[epoch] = 0;
-            totalAaveLenderDeposits = 0;
-
-            emit AaveLenderEpochCloseWithdrawn(epoch, withdrawnLender);
-        }
-
-        // === CL Aave Deposits ===
-        if (totalAaveCLDeposits > 0) {
-            uint256 aaveBalanceCL = getAaveBalance();
-            uint256 withdrawnCL = aaveV3Pool.withdraw(
-                VaultLib.COLLATERAL_TOKEN,
-                aaveBalanceCL,
-                address(this)
-            );
-
-            uint256 depositedCL = totalAaveCLDeposits;
-            uint256 totalInterest = withdrawnCL > depositedCL ? withdrawnCL - depositedCL : 0;
-
-            // CL orders were zeroed during depositUnmatchedCLToAave() or createCLOrder() (mid-epoch).
-            // Restore each order's collateralAmount with their proportional share (principal + interest).
-            // Uses userAaveCLDeposits mapping to identify which orders were in Aave.
-            // Orders not in Aave (should not exist after zeroing, but defensive) are left as-is.
-            for (uint256 i = 0; i < collateralLenderOrders.length; i++) {
-                address user = collateralLenderOrders[i].collateralLender;
-                uint256 userDeposit = userAaveCLDeposits[user][epoch];
-                if (userDeposit > 0) {
-                    uint256 userShare = (userDeposit * withdrawnCL) / depositedCL;
-                    collateralLenderOrders[i].collateralAmount = userShare;
-                    // Clear after first hit to avoid double-processing for multi-order users
-                    userAaveCLDeposits[user][epoch] = 0;
-                }
-            }
-
-            totalCollateralLenderCT += totalInterest;
-            epochToAaveCLDeposits[epoch] = 0;
-            totalAaveCLDeposits = 0;
-
-            emit AaveCLEpochCloseWithdrawn(epoch, withdrawnCL);
-        }
-    }
-
-    function _validateEmergencyTargetEpoch(uint256 targetEpoch) internal view {
-        if (targetEpoch == 0 || targetEpoch > epoch) {
-            revert VaultLib.InvalidEpoch();
-        }
-
-        // Historical epochs are already ended by definition.
-        if (targetEpoch < epoch) {
-            return;
-        }
-
-        // For the current epoch, only allow emergency path if the term ended and close is stuck.
-        if (!epochStarted || block.timestamp <= epochStart + termDuration) {
-            revert VaultLib.EpochNotEnded();
-        }
-        if (block.timestamp <= epochStart + termDuration + emergencyAaveWithdrawDelay) {
-            revert VaultLib.EmergencyWithdrawalTooEarly();
-        }
+    function executeAaveWithdraw(address token, uint256 amount) external onlyProxy lock returns (uint256) {
+        return aaveV3Pool.withdraw(token, amount, address(this));
     }
 
     /**
-     * @notice Permissionless emergency withdrawal of lender Aave funds for a specific ended epoch.
-     * @dev Withdraws only the epoch's proportional share from Aave and moves it to per-epoch claimable state.
-     * @dev Idempotent: returns 0 if already executed or if epoch has no lender Aave deposits.
+     * @notice Sets a lender order's quoteAmount. Used by Upkeeper during epoch-close Aave restoration.
      */
-    function emergencyWithdrawLenderAaveForEpoch(uint256 targetEpoch) external lock returns (uint256) {
-        _validateEmergencyTargetEpoch(targetEpoch);
-
-        if (epochEmergencyLenderWithdrawn[targetEpoch]) {
-            return 0;
-        }
-
-        uint256 epochPrincipal = epochToAaveLenderDeposits[targetEpoch];
-        if (epochPrincipal == 0 || totalAaveLenderDeposits == 0) {
-            return 0;
-        }
-
-        uint256 currentAaveBalance = getAaveBalanceQuote();
-        uint256 amountToWithdraw = (epochPrincipal * currentAaveBalance) / totalAaveLenderDeposits;
-        if (amountToWithdraw == 0) {
-            return 0;
-        }
-        uint256 withdrawn = aaveV3Pool.withdraw(VaultLib.QUOTE_TOKEN, amountToWithdraw, address(this));
-        if (withdrawn != amountToWithdraw) {
-            revert VaultLib.TokenOperationFailed();
-        }
-
-        totalAaveLenderDeposits -= epochPrincipal;
-        epochToAaveLenderDeposits[targetEpoch] = 0;
-        epochEmergencyLenderWithdrawn[targetEpoch] = true;
-        epochEmergencyLenderPrincipalRemaining[targetEpoch] = epochPrincipal;
-        epochEmergencyLenderClaimableRemaining[targetEpoch] = withdrawn;
-
-        emit EmergencyAaveLenderEpochWithdrawn(targetEpoch, epochPrincipal, withdrawn);
-        return withdrawn;
+    function setLenderOrderQuoteAmount(uint256 index, uint256 amount) external onlyProxy {
+        lenderOrders[index].quoteAmount = amount;
     }
 
     /**
-     * @notice Permissionless emergency withdrawal of collateral-lender Aave funds for a specific ended epoch.
-     * @dev Withdraws only the epoch's proportional share from Aave and moves it to per-epoch claimable state.
-     * @dev Idempotent: returns 0 if already executed or if epoch has no CL Aave deposits.
+     * @notice Sets a CL order's collateralAmount. Used by Upkeeper during epoch-close Aave restoration.
      */
-    function emergencyWithdrawCLAaveForEpoch(uint256 targetEpoch) external lock returns (uint256) {
-        _validateEmergencyTargetEpoch(targetEpoch);
-
-        if (epochEmergencyCLWithdrawn[targetEpoch]) {
-            return 0;
-        }
-
-        uint256 epochPrincipal = epochToAaveCLDeposits[targetEpoch];
-        if (epochPrincipal == 0 || totalAaveCLDeposits == 0) {
-            return 0;
-        }
-
-        uint256 currentAaveBalance = getAaveBalance();
-        uint256 amountToWithdraw = (epochPrincipal * currentAaveBalance) / totalAaveCLDeposits;
-        if (amountToWithdraw == 0) {
-            return 0;
-        }
-        uint256 withdrawn = aaveV3Pool.withdraw(VaultLib.COLLATERAL_TOKEN, amountToWithdraw, address(this));
-        if (withdrawn != amountToWithdraw) {
-            revert VaultLib.TokenOperationFailed();
-        }
-
-        totalAaveCLDeposits -= epochPrincipal;
-        epochToAaveCLDeposits[targetEpoch] = 0;
-        epochEmergencyCLWithdrawn[targetEpoch] = true;
-        epochEmergencyCLPrincipalRemaining[targetEpoch] = epochPrincipal;
-        epochEmergencyCLClaimableRemaining[targetEpoch] = withdrawn;
-
-        emit EmergencyAaveCLEpochWithdrawn(targetEpoch, epochPrincipal, withdrawn);
-        return withdrawn;
+    function setCLOrderCollateralAmount(uint256 index, uint256 amount) external onlyProxy {
+        collateralLenderOrders[index].collateralAmount = amount;
     }
 
     /**
-     * @notice Claims a user's lender share after emergency epoch withdrawal.
-     * @dev User claim = proportional share of the epoch's withdrawn amount.
+     * @notice Sets a user's Aave lender deposit for a given epoch.
      */
-    function emergencyClaimLenderAaveForEpoch(uint256 targetEpoch) external lock returns (uint256) {
-        uint256 userPrincipal = userAaveLenderDeposits[msg.sender][targetEpoch];
-        if (userPrincipal == 0) {
-            revert VaultLib.NoEmergencyClaim();
-        }
-
-        uint256 principalRemaining = epochEmergencyLenderPrincipalRemaining[targetEpoch];
-        uint256 claimableRemaining = epochEmergencyLenderClaimableRemaining[targetEpoch];
-        if (principalRemaining == 0 || claimableRemaining == 0) {
-            revert VaultLib.NoEmergencyClaim();
-        }
-
-        uint256 amount = (userPrincipal * claimableRemaining) / principalRemaining;
-        if (amount == 0) {
-            if (userPrincipal == principalRemaining) {
-                amount = claimableRemaining;
-            } else {
-                revert VaultLib.NoEmergencyClaim();
-            }
-        }
-
-        userAaveLenderDeposits[msg.sender][targetEpoch] = 0;
-        epochEmergencyLenderPrincipalRemaining[targetEpoch] = principalRemaining - userPrincipal;
-        epochEmergencyLenderClaimableRemaining[targetEpoch] = claimableRemaining - amount;
-
-        if (!IERC20(VaultLib.QUOTE_TOKEN).transfer(msg.sender, amount)) {
-            revert VaultLib.TokenOperationFailed();
-        }
-
-        emit EmergencyAaveLenderClaimed(msg.sender, targetEpoch, userPrincipal, amount);
-        return amount;
+    function setUserAaveLenderDeposit(address user, uint256 _epoch, uint256 amount) external onlyProxy {
+        userAaveLenderDeposits[user][_epoch] = amount;
     }
 
     /**
-     * @notice Claims a user's collateral-lender share after emergency epoch withdrawal.
-     * @dev User claim = proportional share of the epoch's withdrawn amount.
+     * @notice Sets a user's Aave CL deposit for a given epoch.
      */
-    function emergencyClaimCLAaveForEpoch(uint256 targetEpoch) external lock returns (uint256) {
-        uint256 userPrincipal = userAaveCLDeposits[msg.sender][targetEpoch];
-        if (userPrincipal == 0) {
-            revert VaultLib.NoEmergencyClaim();
-        }
+    function setUserAaveCLDeposit(address user, uint256 _epoch, uint256 amount) external onlyProxy {
+        userAaveCLDeposits[user][_epoch] = amount;
+    }
 
-        uint256 principalRemaining = epochEmergencyCLPrincipalRemaining[targetEpoch];
-        uint256 claimableRemaining = epochEmergencyCLClaimableRemaining[targetEpoch];
-        if (principalRemaining == 0 || claimableRemaining == 0) {
-            revert VaultLib.NoEmergencyClaim();
-        }
+    /**
+     * @notice Batch setter for Aave lender accounting state.
+     */
+    function setAaveLenderState(uint256 _epoch, uint256 _totalDeposits, uint256 _epochDeposits) external onlyProxy {
+        totalAaveLenderDeposits = _totalDeposits;
+        epochToAaveLenderDeposits[_epoch] = _epochDeposits;
+    }
 
-        uint256 amount = (userPrincipal * claimableRemaining) / principalRemaining;
-        if (amount == 0) {
-            if (userPrincipal == principalRemaining) {
-                amount = claimableRemaining;
-            } else {
-                revert VaultLib.NoEmergencyClaim();
-            }
-        }
+    /**
+     * @notice Batch setter for Aave CL accounting state.
+     */
+    function setAaveCLState(uint256 _epoch, uint256 _totalDeposits, uint256 _epochDeposits) external onlyProxy {
+        totalAaveCLDeposits = _totalDeposits;
+        epochToAaveCLDeposits[_epoch] = _epochDeposits;
+    }
 
-        userAaveCLDeposits[msg.sender][targetEpoch] = 0;
-        epochEmergencyCLPrincipalRemaining[targetEpoch] = principalRemaining - userPrincipal;
-        epochEmergencyCLClaimableRemaining[targetEpoch] = claimableRemaining - amount;
+    /**
+     * @notice Batch setter for emergency lender recovery state.
+     */
+    function setEmergencyLenderState(uint256 _epoch, bool _withdrawn, uint256 _principal, uint256 _claimable) external onlyProxy {
+        epochEmergencyLenderWithdrawn[_epoch] = _withdrawn;
+        epochEmergencyLenderPrincipalRemaining[_epoch] = _principal;
+        epochEmergencyLenderClaimableRemaining[_epoch] = _claimable;
+    }
 
-        // Keep totalCollateralLenderCT consistent with principal leaving the vault.
-        totalCollateralLenderCT -= userPrincipal;
-
-        if (!IERC20(VaultLib.COLLATERAL_TOKEN).transfer(msg.sender, amount)) {
-            revert VaultLib.TokenOperationFailed();
-        }
-
-        emit EmergencyAaveCLClaimed(msg.sender, targetEpoch, userPrincipal, amount);
-        return amount;
+    /**
+     * @notice Batch setter for emergency CL recovery state.
+     */
+    function setEmergencyCLState(uint256 _epoch, bool _withdrawn, uint256 _principal, uint256 _claimable) external onlyProxy {
+        epochEmergencyCLWithdrawn[_epoch] = _withdrawn;
+        epochEmergencyCLPrincipalRemaining[_epoch] = _principal;
+        epochEmergencyCLClaimableRemaining[_epoch] = _claimable;
     }
 
     /**
@@ -1223,16 +1044,10 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     }
 
     /**
-     * @notice Sets the maximum acceptable flash loan fee threshold
-     * @dev CIRCUIT BREAKER: If Morpho Blue introduces flash loan fees, this protects the vault
-     * @dev Setting to 0 (default) means only 0% fee flash loans are acceptable (Morpho Blue standard)
-     * @dev If > 0, allows some fee tolerance but may make vault economics unprofitable
-     * @param _maxFeeBps Maximum fee in basis points (100 bps = 1%)
-     * @custom:security Owner should monitor Morpho fee changes and update accordingly
+     * @notice Minimal proxy setter for flash loan fee threshold (called by Util)
+     * @dev Validation is done in LVLidoVaultUtil.setMaxFlashLoanFeeThreshold()
      */
-    function setMaxFlashLoanFeeThreshold(uint256 _maxFeeBps, uint256 _flashLoanFeeBps) external onlyOwner {
-        require(_maxFeeBps <= 1000, "Fee threshold too high"); // Max 10% as sanity check
-        require(_flashLoanFeeBps <= 1000, "Flash loan fee too high"); // Max 10% as sanity check
+    function setMaxFlashLoanFeeThresholdProxy(uint256 _maxFeeBps, uint256 _flashLoanFeeBps) external onlyProxy {
         uint256 oldThreshold = maxAcceptableFlashLoanFeeBps;
         maxAcceptableFlashLoanFeeBps = _maxFeeBps;
         flashLoanFeeBps = _flashLoanFeeBps;
@@ -1400,7 +1215,6 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     function createLenderOrder(uint256 amount) external lock returns (uint256) {
         // Prevent zero-value transactions to save gas
         if (amount == 0) revert VaultLib.InvalidInput();
-        // if (!maxFundsLimiter(amount, 0)) revert VaultLib.MaxFundsExceeded();
         lenderOrders.push(VaultLib.LenderOrder({lender: msg.sender, quoteAmount: amount, vaultShares: 0}));
         totalLenderQTUnutilized += amount;
 
@@ -1443,7 +1257,7 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         if (collateralAmount == 0) {
             revert VaultLib.InvalidInput();
         }
-        // if (!maxFundsLimiter(0, collateralAmount)) revert VaultLib.MaxFundsExceeded();
+
 
         totalBorrowerCT += collateralAmount;
         totalBorrowerCTUnutilized += collateralAmount;
@@ -1473,7 +1287,7 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         if (amount == 0) {
             revert VaultLib.InvalidInput();
         }
-        // if (!maxFundsLimiter(0, amount)) revert VaultLib.MaxFundsExceeded();
+
 
         totalCollateralLenderCT += amount;
         collateralLenderOrders.push(VaultLib.CollateralLenderOrder(msg.sender, amount));

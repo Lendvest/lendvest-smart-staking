@@ -80,7 +80,7 @@ contract E2EBorrowerAPR is BaseStableTest {
         console.log("=== EPOCH START ===");
 
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
 
         uint256 epochStart = block.timestamp;
 

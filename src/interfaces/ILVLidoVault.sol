@@ -71,23 +71,41 @@ interface ILVLidoVault {
     function setTotalCLDepositsUnutilized(uint256 amount) external;
     function setTotalCLDepositsUtilized(uint256 amount) external;
     function end_epoch() external;
-    function withdrawAllAaveDepositsForEpochClose() external;
     function owner() external view returns (address);
     function getAllowKick() external view returns (bool);
     function updateRate(uint256 _rate) external;
+    function transferForProxy(address token, address recipient, uint256 amount) external returns (bool);
 
-
-    function getEpochAaveCLDeposits(uint256 _epoch) external view returns (uint256);
-    function getUserAaveCLDeposit(address user, uint256 _epoch) external view returns (uint256);
-    function getAaveATokenAddress() external view returns (address);
+    // Aave read-only (auto-generated from public state)
     function getAaveBalance() external view returns (uint256);
-    function getTotalAaveInterestAccrued() external view returns (uint256);
-    function getEpochAaveLenderDeposits(uint256 _epoch) external view returns (uint256);
     function getAaveBalanceQuote() external view returns (uint256);
+    function totalAaveLenderDeposits() external view returns (uint256);
+    function totalAaveCLDeposits() external view returns (uint256);
+    function epochToAaveLenderDeposits(uint256 _epoch) external view returns (uint256);
+    function epochToAaveCLDeposits(uint256 _epoch) external view returns (uint256);
+    function userAaveLenderDeposits(address user, uint256 _epoch) external view returns (uint256);
+    function userAaveCLDeposits(address user, uint256 _epoch) external view returns (uint256);
     function emergencyAaveWithdrawDelay() external view returns (uint256);
-    function emergencyWithdrawLenderAaveForEpoch(uint256 targetEpoch) external returns (uint256);
-    function emergencyWithdrawCLAaveForEpoch(uint256 targetEpoch) external returns (uint256);
-    function emergencyClaimLenderAaveForEpoch(uint256 targetEpoch) external returns (uint256);
-    function emergencyClaimCLAaveForEpoch(uint256 targetEpoch) external returns (uint256);
 
+    // Emergency recovery state (auto-generated from public mappings)
+    function epochEmergencyLenderWithdrawn(uint256 _epoch) external view returns (bool);
+    function epochEmergencyCLWithdrawn(uint256 _epoch) external view returns (bool);
+    function epochEmergencyLenderPrincipalRemaining(uint256 _epoch) external view returns (uint256);
+    function epochEmergencyLenderClaimableRemaining(uint256 _epoch) external view returns (uint256);
+    function epochEmergencyCLPrincipalRemaining(uint256 _epoch) external view returns (uint256);
+    function epochEmergencyCLClaimableRemaining(uint256 _epoch) external view returns (uint256);
+
+    // Execution wrappers (called by Util and Upkeeper)
+    function executeAaveWithdraw(address token, uint256 amount) external returns (uint256);
+    function setLenderOrderQuoteAmount(uint256 index, uint256 amount) external;
+    function setCLOrderCollateralAmount(uint256 index, uint256 amount) external;
+    function setUserAaveLenderDeposit(address user, uint256 _epoch, uint256 amount) external;
+    function setUserAaveCLDeposit(address user, uint256 _epoch, uint256 amount) external;
+    function setAaveLenderState(uint256 _epoch, uint256 _totalDeposits, uint256 _epochDeposits) external;
+    function setAaveCLState(uint256 _epoch, uint256 _totalDeposits, uint256 _epochDeposits) external;
+    function setEmergencyLenderState(uint256 _epoch, bool _withdrawn, uint256 _principal, uint256 _claimable) external;
+    function setEmergencyCLState(uint256 _epoch, bool _withdrawn, uint256 _principal, uint256 _claimable) external;
+
+    // Admin proxy setters (called by Util)
+    function setMaxFlashLoanFeeThresholdProxy(uint256 _maxFeeBps, uint256 _flashLoanFeeBps) external;
 }

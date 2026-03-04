@@ -432,4 +432,185 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
         updateRateNeeded = false; // Mark that we've successfully updated the rate
         emit VaultLib.OCRResponse(requestId, response, rate, err);
     }
+
+    // ============================================================
+    // Emergency Aave recovery — extracted from LVLidoVault to reduce
+    // vault bytecode below EIP-170 limit.
+    // ============================================================
+
+    function _validateEmergencyTargetEpoch(uint256 targetEpoch) internal view {
+        uint256 currentEpoch = LVLidoVault.epoch();
+        if (targetEpoch == 0 || targetEpoch > currentEpoch) {
+            revert VaultLib.InvalidEpoch();
+        }
+        if (targetEpoch < currentEpoch) {
+            return;
+        }
+        if (!LVLidoVault.epochStarted() || block.timestamp <= LVLidoVault.epochStart() + LVLidoVault.termDuration()) {
+            revert VaultLib.EpochNotEnded();
+        }
+        if (block.timestamp <= LVLidoVault.epochStart() + LVLidoVault.termDuration() + LVLidoVault.emergencyAaveWithdrawDelay()) {
+            revert VaultLib.EmergencyWithdrawalTooEarly();
+        }
+    }
+
+    /**
+     * @notice Permissionless emergency withdrawal of lender Aave funds for a specific ended epoch.
+     * @dev Withdraws only the epoch's proportional share from Aave and moves it to per-epoch claimable state.
+     * @dev Idempotent: returns 0 if already executed or if epoch has no lender Aave deposits.
+     */
+    function emergencyWithdrawLenderAaveForEpoch(uint256 targetEpoch) external returns (uint256) {
+        _validateEmergencyTargetEpoch(targetEpoch);
+
+        if (LVLidoVault.epochEmergencyLenderWithdrawn(targetEpoch)) {
+            return 0;
+        }
+
+        uint256 epochPrincipal = LVLidoVault.epochToAaveLenderDeposits(targetEpoch);
+        uint256 totalDeposits = LVLidoVault.totalAaveLenderDeposits();
+        if (epochPrincipal == 0 || totalDeposits == 0) {
+            return 0;
+        }
+
+        uint256 currentAaveBalance = LVLidoVault.getAaveBalanceQuote();
+        uint256 amountToWithdraw = (epochPrincipal * currentAaveBalance) / totalDeposits;
+        if (amountToWithdraw == 0) {
+            return 0;
+        }
+
+        uint256 withdrawn = LVLidoVault.executeAaveWithdraw(VaultLib.QUOTE_TOKEN, amountToWithdraw);
+        if (withdrawn != amountToWithdraw) {
+            revert VaultLib.TokenOperationFailed();
+        }
+
+        LVLidoVault.setAaveLenderState(targetEpoch, totalDeposits - epochPrincipal, 0);
+        LVLidoVault.setEmergencyLenderState(targetEpoch, true, epochPrincipal, withdrawn);
+
+        emit VaultLib.EmergencyAaveLenderEpochWithdrawn(targetEpoch, epochPrincipal, withdrawn);
+        return withdrawn;
+    }
+
+    /**
+     * @notice Permissionless emergency withdrawal of collateral-lender Aave funds for a specific ended epoch.
+     * @dev Withdraws only the epoch's proportional share from Aave and moves it to per-epoch claimable state.
+     * @dev Idempotent: returns 0 if already executed or if epoch has no CL Aave deposits.
+     */
+    function emergencyWithdrawCLAaveForEpoch(uint256 targetEpoch) external returns (uint256) {
+        _validateEmergencyTargetEpoch(targetEpoch);
+
+        if (LVLidoVault.epochEmergencyCLWithdrawn(targetEpoch)) {
+            return 0;
+        }
+
+        uint256 epochPrincipal = LVLidoVault.epochToAaveCLDeposits(targetEpoch);
+        uint256 totalDeposits = LVLidoVault.totalAaveCLDeposits();
+        if (epochPrincipal == 0 || totalDeposits == 0) {
+            return 0;
+        }
+
+        uint256 currentAaveBalance = LVLidoVault.getAaveBalance();
+        uint256 amountToWithdraw = (epochPrincipal * currentAaveBalance) / totalDeposits;
+        if (amountToWithdraw == 0) {
+            return 0;
+        }
+
+        uint256 withdrawn = LVLidoVault.executeAaveWithdraw(VaultLib.COLLATERAL_TOKEN, amountToWithdraw);
+        if (withdrawn != amountToWithdraw) {
+            revert VaultLib.TokenOperationFailed();
+        }
+
+        LVLidoVault.setAaveCLState(targetEpoch, totalDeposits - epochPrincipal, 0);
+        LVLidoVault.setEmergencyCLState(targetEpoch, true, epochPrincipal, withdrawn);
+
+        emit VaultLib.EmergencyAaveCLEpochWithdrawn(targetEpoch, epochPrincipal, withdrawn);
+        return withdrawn;
+    }
+
+    /**
+     * @notice Claims a user's lender share after emergency epoch withdrawal.
+     * @dev User claim = proportional share of the epoch's withdrawn amount.
+     */
+    function emergencyClaimLenderAaveForEpoch(uint256 targetEpoch) external returns (uint256) {
+        uint256 userPrincipal = LVLidoVault.userAaveLenderDeposits(msg.sender, targetEpoch);
+        if (userPrincipal == 0) {
+            revert VaultLib.NoEmergencyClaim();
+        }
+
+        uint256 principalRemaining = LVLidoVault.epochEmergencyLenderPrincipalRemaining(targetEpoch);
+        uint256 claimableRemaining = LVLidoVault.epochEmergencyLenderClaimableRemaining(targetEpoch);
+        if (principalRemaining == 0 || claimableRemaining == 0) {
+            revert VaultLib.NoEmergencyClaim();
+        }
+
+        uint256 amount = (userPrincipal * claimableRemaining) / principalRemaining;
+        if (amount == 0) {
+            if (userPrincipal == principalRemaining) {
+                amount = claimableRemaining;
+            } else {
+                revert VaultLib.NoEmergencyClaim();
+            }
+        }
+
+        LVLidoVault.setUserAaveLenderDeposit(msg.sender, targetEpoch, 0);
+        LVLidoVault.setEmergencyLenderState(
+            targetEpoch, true, principalRemaining - userPrincipal, claimableRemaining - amount
+        );
+        LVLidoVault.transferForProxy(VaultLib.QUOTE_TOKEN, msg.sender, amount);
+
+        emit VaultLib.EmergencyAaveLenderClaimed(msg.sender, targetEpoch, userPrincipal, amount);
+        return amount;
+    }
+
+    /**
+     * @notice Claims a user's collateral-lender share after emergency epoch withdrawal.
+     * @dev User claim = proportional share of the epoch's withdrawn amount.
+     */
+    function emergencyClaimCLAaveForEpoch(uint256 targetEpoch) external returns (uint256) {
+        uint256 userPrincipal = LVLidoVault.userAaveCLDeposits(msg.sender, targetEpoch);
+        if (userPrincipal == 0) {
+            revert VaultLib.NoEmergencyClaim();
+        }
+
+        uint256 principalRemaining = LVLidoVault.epochEmergencyCLPrincipalRemaining(targetEpoch);
+        uint256 claimableRemaining = LVLidoVault.epochEmergencyCLClaimableRemaining(targetEpoch);
+        if (principalRemaining == 0 || claimableRemaining == 0) {
+            revert VaultLib.NoEmergencyClaim();
+        }
+
+        uint256 amount = (userPrincipal * claimableRemaining) / principalRemaining;
+        if (amount == 0) {
+            if (userPrincipal == principalRemaining) {
+                amount = claimableRemaining;
+            } else {
+                revert VaultLib.NoEmergencyClaim();
+            }
+        }
+
+        LVLidoVault.setUserAaveCLDeposit(msg.sender, targetEpoch, 0);
+        LVLidoVault.setEmergencyCLState(
+            targetEpoch, true, principalRemaining - userPrincipal, claimableRemaining - amount
+        );
+        // Keep totalCollateralLenderCT consistent with principal leaving the vault.
+        LVLidoVault.setTotalCollateralLenderCT(LVLidoVault.totalCollateralLenderCT() - userPrincipal);
+        LVLidoVault.transferForProxy(VaultLib.COLLATERAL_TOKEN, msg.sender, amount);
+
+        emit VaultLib.EmergencyAaveCLClaimed(msg.sender, targetEpoch, userPrincipal, amount);
+        return amount;
+    }
+
+    // ============================================================
+    // Admin functions — moved from LVLidoVault to reduce bytecode
+    // ============================================================
+
+    /**
+     * @notice Sets the maximum acceptable flash loan fee threshold
+     * @dev CIRCUIT BREAKER: If Morpho Blue introduces flash loan fees, this protects the vault
+     * @param _maxFeeBps Maximum fee in basis points (100 bps = 1%)
+     * @param _flashLoanFeeBps Flash loan fee in basis points
+     */
+    function setMaxFlashLoanFeeThreshold(uint256 _maxFeeBps, uint256 _flashLoanFeeBps) external onlyOwner {
+        require(_maxFeeBps <= 1000, "Fee threshold too high");
+        require(_flashLoanFeeBps <= 1000, "Flash loan fee too high");
+        LVLidoVault.setMaxFlashLoanFeeThresholdProxy(_maxFeeBps, _flashLoanFeeBps);
+    }
 }

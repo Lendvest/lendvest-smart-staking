@@ -116,7 +116,7 @@ abstract contract BaseStableTest is Test, TestHelpers {
         _setupBalancedOrders();
         // Set flash loan fee threshold to allow some slippage
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
         vm.prank(owner);
         vault.startEpoch();
     }

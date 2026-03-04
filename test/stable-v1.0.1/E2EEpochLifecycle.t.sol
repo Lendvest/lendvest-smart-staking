@@ -93,7 +93,7 @@ contract E2EEpochLifecycle is BaseStableTest {
 
         // Set flash loan fee threshold and start epoch
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
         vm.prank(owner);
         vault.startEpoch();
         epochStartTime = block.timestamp;
@@ -204,7 +204,7 @@ contract E2EEpochLifecycle is BaseStableTest {
         _fundCollateralLender(collateralLender1, 5 ether);
 
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
         vm.prank(owner);
         vault.startEpoch();
 
@@ -247,7 +247,7 @@ contract E2EEpochLifecycle is BaseStableTest {
         console.log("\n=== PHASE 2: Epoch Start ===");
 
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
         vm.prank(owner);
         vault.startEpoch();
 
@@ -319,7 +319,7 @@ contract E2EEpochLifecycle is BaseStableTest {
         console.log("=== Starting Epoch ===");
 
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
 
         uint256 epochStartTimestamp = block.timestamp;
         vm.prank(owner);
@@ -408,7 +408,7 @@ contract E2EEpochLifecycle is BaseStableTest {
         _fundCollateralLender(collateralLender1, clAmount);
 
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
 
         console.log("");
         console.log("=== Starting Epoch ===");

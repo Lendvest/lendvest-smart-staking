@@ -74,6 +74,14 @@ library VaultLib {
         uint256 collateralLendersInterestAccrued
     );
 
+    // Emergency Aave events (shared across vault, util, and upkeeper)
+    event AaveLenderEpochCloseWithdrawn(uint256 epoch, uint256 totalWithdrawn);
+    event AaveCLEpochCloseWithdrawn(uint256 epoch, uint256 totalWithdrawn);
+    event EmergencyAaveLenderEpochWithdrawn(uint256 epoch, uint256 principal, uint256 totalWithdrawn);
+    event EmergencyAaveCLEpochWithdrawn(uint256 epoch, uint256 principal, uint256 totalWithdrawn);
+    event EmergencyAaveLenderClaimed(address user, uint256 epoch, uint256 principal, uint256 amount);
+    event EmergencyAaveCLClaimed(address user, uint256 epoch, uint256 principal, uint256 amount);
+
     /* Errors */
     error InsufficientFunds();
     error Unauthorized();

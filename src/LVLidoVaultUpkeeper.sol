@@ -101,7 +101,7 @@ contract LVLidoVaultUpkeeper {
         // Withdraw all Aave deposits (lender + CL) back to vault before processing matches.
         // This ensures Aave funds are scoped to a single epoch and restores order amounts
         // with principal + interest so they carry over correctly to the next epoch.
-        LVLidoVault.withdrawAllAaveDepositsForEpochClose();
+        _withdrawAaveDepositsForEpochClose();
 
         // Process matches and create new orders
         _processMatchesAndCreateOrders(matchedLendersOwed, matchedBorrowersOwed, matchedCollateralLendersOwed);
@@ -109,6 +109,63 @@ contract LVLidoVaultUpkeeper {
         // Final cleanup
         LVLidoVault.end_epoch();
         LVLidoVault.setAllowKick(false);
+    }
+
+    /**
+     * @notice Withdraws all Aave deposits (lender + CL) back to the vault at epoch close.
+     * @dev Extracted from LVLidoVault to reduce vault bytecode below EIP-170 limit.
+     * @dev For lenders: restores quoteAmount (was zeroed during deposit) with principal + proportional interest.
+     * @dev For CLs: restores collateralAmount with proportional share (principal + interest).
+     */
+    function _withdrawAaveDepositsForEpochClose() internal {
+        uint256 currentEpoch = LVLidoVault.epoch();
+
+        // === Lender Aave Deposits ===
+        uint256 totalLenderDeposits = LVLidoVault.totalAaveLenderDeposits();
+        if (totalLenderDeposits > 0) {
+            uint256 aaveBalance = LVLidoVault.getAaveBalanceQuote();
+            uint256 withdrawn = LVLidoVault.executeAaveWithdraw(VaultLib.QUOTE_TOKEN, aaveBalance);
+
+            VaultLib.LenderOrder[] memory orders = LVLidoVault.getLenderOrders();
+            for (uint256 i = 0; i < orders.length; i++) {
+                address user = orders[i].lender;
+                uint256 userDeposit = LVLidoVault.userAaveLenderDeposits(user, currentEpoch);
+                if (userDeposit > 0) {
+                    uint256 userShare = (userDeposit * withdrawn) / totalLenderDeposits;
+                    LVLidoVault.setLenderOrderQuoteAmount(i, userShare);
+                    LVLidoVault.setUserAaveLenderDeposit(user, currentEpoch, 0);
+                }
+            }
+
+            LVLidoVault.setTotalLenderQTUnutilized(LVLidoVault.totalLenderQTUnutilized() + withdrawn);
+            LVLidoVault.setAaveLenderState(currentEpoch, 0, 0);
+
+            emit VaultLib.AaveLenderEpochCloseWithdrawn(currentEpoch, withdrawn);
+        }
+
+        // === CL Aave Deposits ===
+        uint256 totalCLDeposits = LVLidoVault.totalAaveCLDeposits();
+        if (totalCLDeposits > 0) {
+            uint256 aaveBalance = LVLidoVault.getAaveBalance();
+            uint256 withdrawn = LVLidoVault.executeAaveWithdraw(VaultLib.COLLATERAL_TOKEN, aaveBalance);
+            uint256 totalInterest = withdrawn > totalCLDeposits ? withdrawn - totalCLDeposits : 0;
+
+            VaultLib.CollateralLenderOrder[] memory clOrders = LVLidoVault.getCollateralLenderOrders();
+            for (uint256 i = 0; i < clOrders.length; i++) {
+                address user = clOrders[i].collateralLender;
+                uint256 userDeposit = LVLidoVault.userAaveCLDeposits(user, currentEpoch);
+                if (userDeposit > 0) {
+                    uint256 userShare = (userDeposit * withdrawn) / totalCLDeposits;
+                    LVLidoVault.setCLOrderCollateralAmount(i, userShare);
+                    LVLidoVault.setUserAaveCLDeposit(user, currentEpoch, 0);
+                }
+            }
+
+            LVLidoVault.setTotalCollateralLenderCT(LVLidoVault.totalCollateralLenderCT() + totalInterest);
+            LVLidoVault.setAaveCLState(currentEpoch, 0, 0);
+
+            emit VaultLib.AaveCLEpochCloseWithdrawn(currentEpoch, withdrawn);
+        }
     }
 
     /**

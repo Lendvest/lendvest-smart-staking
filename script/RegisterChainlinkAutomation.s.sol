@@ -48,7 +48,7 @@ contract RegisterChainlinkAutomation is Script {
     uint96 public constant INITIAL_FUNDING = 5 ether; // 5 LINK
 
     // Gas limit for performUpkeep execution
-    uint32 public constant GAS_LIMIT = 500000;
+    uint32 public constant GAS_LIMIT = 2000000;
 
     function run() public {
         // Detect network and set addresses

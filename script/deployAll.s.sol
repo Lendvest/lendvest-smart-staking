@@ -32,7 +32,7 @@ contract DeployAll is Script {
     // =============================================================
     // INCREMENT THIS FOR EVERY NEW DEPLOYMENT
     // This ensures unique token names and prevents address confusion
-    uint256 public constant DEPLOYMENT_VERSION = 5;
+    uint256 public constant DEPLOYMENT_VERSION = 7;
 
     // =============================================================
     //                    ACCESS CONTROL
@@ -40,7 +40,7 @@ contract DeployAll is Script {
     // Admin wallet that retains mint/burn access for rescue operations.
     // This wallet can later revoke its own access via setAllowed(self, false)
     // or renounce token ownership entirely via renounceOwnership().
-    address public constant ADMIN_WALLET = 0x64ec61145EC91F2F6370AAbDF977cE359748e507;
+    address public constant ADMIN_WALLET = 0x5D42779C9412059b3EcA2F017e76BCa086921a69;
 
     // =============================================================
     //                    ETHEREUM MAINNET ADDRESSES
@@ -231,6 +231,7 @@ contract DeployAll is Script {
         console.log("     - Call lvweth.transferOwnership(ADMIN_WALLET)");
         console.log("     - Call lvwsteth.transferOwnership(ADMIN_WALLET)");
         console.log("  5. Verify on Etherscan");
+        console.log("  6. OWNERSHIP: Revoke ownership at the start of epoch 3 (admin manual action)");
         console.log("=================================================================");
     }
 

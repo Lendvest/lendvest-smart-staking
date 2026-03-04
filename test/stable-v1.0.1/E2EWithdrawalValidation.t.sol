@@ -93,7 +93,7 @@ contract E2EWithdrawalValidation is BaseStableTest {
 
         // --- START EPOCH (triggers matching) ---
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
         vm.prank(owner);
         vault.startEpoch();
 
@@ -158,7 +158,7 @@ contract E2EWithdrawalValidation is BaseStableTest {
 
         // --- START EPOCH ---
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
         vm.prank(owner);
         vault.startEpoch();
 
@@ -220,7 +220,7 @@ contract E2EWithdrawalValidation is BaseStableTest {
 
         // --- START EPOCH ---
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
         vm.prank(owner);
         vault.startEpoch();
 
@@ -297,7 +297,7 @@ contract E2EWithdrawalValidation is BaseStableTest {
 
         // Start epoch
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
         vm.prank(owner);
         vault.startEpoch();
 
@@ -351,7 +351,7 @@ contract E2EWithdrawalValidation is BaseStableTest {
 
         // Start epoch
         vm.prank(owner);
-        vault.setMaxFlashLoanFeeThreshold(100, 0);
+        vaultUtil.setMaxFlashLoanFeeThreshold(100, 0);
         vm.prank(owner);
         vault.startEpoch();
 
