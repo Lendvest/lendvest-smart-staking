@@ -236,12 +236,16 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         // 2. _borrowInitiated flag - only set by this contract in tryMatchOrders()
         if (msg.sender != address(morpho) || !_borrowInitiated) revert VaultLib.Unauthorized();
         _borrowInitiated = false;
-        
+
         // Decode the user data to get borrowing parameters
         (uint256 baseLoanCollateral, uint256 amountToBorrow) = abi.decode(data, (uint256, uint256));
 
         // Calculate total collateral (base + flash loan amount)
         uint256 totalCollateral = baseLoanCollateral + assets;
+
+        // CEI: Record state changes BEFORE any external calls
+        totalBorrowAmount = amountToBorrow;
+
         emit VaultLib.LoanComposition(baseLoanCollateral, assets, totalCollateral, amountToBorrow);
 
         // Mint test collateral tokens and approve them for the pool
@@ -251,9 +255,6 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         ) {
             revert VaultLib.TokenOperationFailed();
         }
-
-        // Record the borrowed amount for accounting purposes
-        totalBorrowAmount = amountToBorrow;
 
         // Draw debt from the Ajna pool using the collateral
         pool.drawDebt(address(this), amountToBorrow, currentBucketIndex, totalCollateral);
@@ -1332,6 +1333,10 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
 
             collateralLenderOrders[collateralLenderOrders.length - 1].collateralAmount = 0;
 
+            // Decrement totalCollateralLenderCT since funds going to Aave
+            // (prevents phantom collateral - totalAaveCLDeposits tracks Aave portion)
+            totalCollateralLenderCT -= amount;
+
             if (!IERC20(VaultLib.COLLATERAL_TOKEN).approve(address(aaveV3Pool), amount)) {
                 revert VaultLib.TokenOperationFailed();
             }
@@ -1537,9 +1542,8 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
 
                     // Add FULL Aave withdrawal (principal + interest) since order was zeroed
                     userWithdrawalAmount += withdrawnFromAave;
-                    // Track Aave principal for totalCollateralLenderCT decrement
-                    // (totalCollateralLenderCT was NOT decremented when funds went to Aave)
-                    userPrincipalAmount += userCurrentEpochAaveDeposit;
+                    // NOTE: Do NOT add to userPrincipalAmount — totalCollateralLenderCT was
+                    // already decremented when funds went to Aave (in createCLOrder)
 
                     // Update Aave tracking
                     totalAaveCLDeposits -= userCurrentEpochAaveDeposit;
