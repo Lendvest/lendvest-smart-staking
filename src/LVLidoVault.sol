@@ -58,6 +58,8 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     uint256 public deploymentTimestamp;
     uint256 public rate = 0;
     int256 public constant priceDifferencethreshold = -1e16; // -1%
+    uint256 public constant MIN_ORDER_SIZE = 1e16; // 0.01 ETH - prevents storage bloat DoS
+    uint256 public constant MAX_ORDERS_PER_USER = 10; // Prevents single actor from bloating arrays
     bool public epochStarted;
     bool private _borrowInitiated;
     bool public fundsQueued;
@@ -91,6 +93,9 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     uint256 public requestId;
     uint256 public totalManualRepay;
 
+    // Anti-DoS: track active orders per user
+    mapping(address => uint256) public userActiveOrderCount;
+
     bool internal locked;
 
     event RateUpdated(uint256 rate);
@@ -101,6 +106,9 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     event AaveLenderDeposited(uint256 epoch, uint256 totalAmount, uint256 userCount);
     event AaveLenderWithdrawn(address user, uint256 amount, uint256 epoch);
     event AccountingDrift(string field, uint256 expected, uint256 actual);
+
+    error OrderBelowMinimum(uint256 amount, uint256 minimum);
+    error MaxOrdersExceeded(address user, uint256 current, uint256 max);
 
     /**
      * @notice Constructor
@@ -1219,8 +1227,14 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
      * @dev or deposited into the flagship vault during epoch start
      */
     function createLenderOrder(uint256 amount) external lock returns (uint256) {
-        // Prevent zero-value transactions to save gas
-        if (amount == 0) revert VaultLib.InvalidInput();
+        // Anti-DoS: enforce minimum order size
+        if (amount < MIN_ORDER_SIZE) revert OrderBelowMinimum(amount, MIN_ORDER_SIZE);
+        // Anti-DoS: enforce max orders per user
+        if (userActiveOrderCount[msg.sender] >= MAX_ORDERS_PER_USER) {
+            revert MaxOrdersExceeded(msg.sender, userActiveOrderCount[msg.sender], MAX_ORDERS_PER_USER);
+        }
+        userActiveOrderCount[msg.sender]++;
+
         lenderOrders.push(VaultLib.LenderOrder({lender: msg.sender, quoteAmount: amount, vaultShares: 0}));
         totalLenderQTUnutilized += amount;
 
@@ -1260,10 +1274,13 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
      * @return The amount of collateral deposited
      */
     function createBorrowerOrder(uint256 collateralAmount) external lock returns (uint256) {
-        if (collateralAmount == 0) {
-            revert VaultLib.InvalidInput();
+        // Anti-DoS: enforce minimum order size
+        if (collateralAmount < MIN_ORDER_SIZE) revert OrderBelowMinimum(collateralAmount, MIN_ORDER_SIZE);
+        // Anti-DoS: enforce max orders per user
+        if (userActiveOrderCount[msg.sender] >= MAX_ORDERS_PER_USER) {
+            revert MaxOrdersExceeded(msg.sender, userActiveOrderCount[msg.sender], MAX_ORDERS_PER_USER);
         }
-
+        userActiveOrderCount[msg.sender]++;
 
         totalBorrowerCT += collateralAmount;
         totalBorrowerCTUnutilized += collateralAmount;
@@ -1289,11 +1306,13 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
      * @dev potentially preventing liquidations. Collateral lenders earn fees from this service.
      */
     function createCLOrder(uint256 amount) external lock returns (uint256) {
-        // Prevent zero-value transactions to save gas
-        if (amount == 0) {
-            revert VaultLib.InvalidInput();
+        // Anti-DoS: enforce minimum order size
+        if (amount < MIN_ORDER_SIZE) revert OrderBelowMinimum(amount, MIN_ORDER_SIZE);
+        // Anti-DoS: enforce max orders per user
+        if (userActiveOrderCount[msg.sender] >= MAX_ORDERS_PER_USER) {
+            revert MaxOrdersExceeded(msg.sender, userActiveOrderCount[msg.sender], MAX_ORDERS_PER_USER);
         }
-
+        userActiveOrderCount[msg.sender]++;
 
         totalCollateralLenderCT += amount;
         collateralLenderOrders.push(VaultLib.CollateralLenderOrder(msg.sender, amount));
@@ -1334,11 +1353,13 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
    function withdrawLenderOrder() external lock returns (uint256) {
         uint256 userWithdrawalAmount = 0;
         uint256 userPrincipalAmount = 0;
+        uint256 ordersRemoved = 0;
         bool aaveWithdrawn = false;
 
         // Find and collect all orders from this lender
         for (uint256 i = 0; i < lenderOrders.length;) {
             if (lenderOrders[i].lender == msg.sender) {
+                ordersRemoved++;
                 uint256 orderAmount = lenderOrders[i].quoteAmount;
                 userWithdrawalAmount += orderAmount;
                 userPrincipalAmount += orderAmount;
@@ -1398,6 +1419,13 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         // Update state - only subtract principal, not interest
         totalLenderQTUnutilized -= userPrincipalAmount;
 
+        // Decrement user's active order count
+        if (userActiveOrderCount[msg.sender] >= ordersRemoved) {
+            userActiveOrderCount[msg.sender] -= ordersRemoved;
+        } else {
+            userActiveOrderCount[msg.sender] = 0;
+        }
+
         // Emit event before any external calls
         emit VaultLib.WithdrawLender(msg.sender, userWithdrawalAmount);
 
@@ -1418,8 +1446,10 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
      */
     function withdrawBorrowerOrder() external lock returns (uint256) {
         uint256 userWithdrawalAmount = 0;
+        uint256 ordersRemoved = 0;
         for (uint256 i = 0; i < borrowerOrders.length;) {
             if (borrowerOrders[i].borrower == msg.sender) {
+                ordersRemoved++;
                 userWithdrawalAmount += borrowerOrders[i].collateralAmount;
                 if (i < borrowerOrders.length - 1) {
                     borrowerOrders[i] = borrowerOrders[borrowerOrders.length - 1];
@@ -1436,6 +1466,14 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
 
         totalBorrowerCT -= userWithdrawalAmount;
         totalBorrowerCTUnutilized -= userWithdrawalAmount;
+
+        // Decrement user's active order count
+        if (userActiveOrderCount[msg.sender] >= ordersRemoved) {
+            userActiveOrderCount[msg.sender] -= ordersRemoved;
+        } else {
+            userActiveOrderCount[msg.sender] = 0;
+        }
+
         emit VaultLib.WithdrawBorrower(msg.sender, userWithdrawalAmount);
         if (!IERC20(VaultLib.COLLATERAL_TOKEN).transfer(msg.sender, userWithdrawalAmount)) {
             revert VaultLib.TokenOperationFailed();
@@ -1458,14 +1496,16 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
    function withdrawCLOrder() external lock returns (uint256) {
         uint256 userWithdrawalAmount = 0;
         uint256 userPrincipalAmount = 0;
+        uint256 ordersRemoved = 0;
         bool aaveWithdrawn = false;
 
         // Step 1: Collect from local collateralLenderOrders array
-        // This includes: 
+        // This includes:
         // - Orders not yet matched (from current or past epochs)
         // - Orders redistributed from past epochs (with interest)
         for (uint256 i = 0; i < collateralLenderOrders.length;) {
             if (collateralLenderOrders[i].collateralLender == msg.sender) {
+                ordersRemoved++;
                 uint256 orderAmount = collateralLenderOrders[i].collateralAmount;
                 userWithdrawalAmount += orderAmount;
                 userPrincipalAmount += orderAmount;
@@ -1527,7 +1567,14 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
 
         // Update global collateral lender total - only subtract principal, not interest
         totalCollateralLenderCT -= userPrincipalAmount;
-        
+
+        // Decrement user's active order count
+        if (userActiveOrderCount[msg.sender] >= ordersRemoved) {
+            userActiveOrderCount[msg.sender] -= ordersRemoved;
+        } else {
+            userActiveOrderCount[msg.sender] = 0;
+        }
+
         emit VaultLib.WithdrawCollateralLender(msg.sender, userWithdrawalAmount);
         
         // Transfer all withdrawn funds to user (principal + interest)
