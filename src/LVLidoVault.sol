@@ -100,6 +100,7 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     event AaveCLWithdrawn(address user, uint256 amount, uint256 epoch);
     event AaveLenderDeposited(uint256 epoch, uint256 totalAmount, uint256 userCount);
     event AaveLenderWithdrawn(address user, uint256 amount, uint256 epoch);
+    event AccountingDrift(string field, uint256 expected, uint256 actual);
 
     /**
      * @notice Constructor
@@ -451,7 +452,13 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
 
         // Note Accounting, lender fees deducted here
         totalLenderQTUtilized += totalPostFeeDepositAmount;
-        totalLenderQTUnutilized -= totalPreFeeAmountToDeposit;
+        if (totalPreFeeAmountToDeposit > totalLenderQTUnutilized) {
+            uint256 originalValue = totalLenderQTUnutilized;
+            totalLenderQTUnutilized = 0;
+            emit AccountingDrift("totalLenderQTUnutilized", originalValue, totalPreFeeAmountToDeposit);
+        } else {
+            totalLenderQTUnutilized -= totalPreFeeAmountToDeposit;
+        }
 
         // Build params and execute flash loan
         uint256 flashLoanAmount = (borrowerCTMatched * (VaultLib.leverageFactor - 10)) / 10;
