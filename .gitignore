@@ -10,3 +10,6 @@ node_modules/
 
 # Environment
 .env
+
+audit_findings.csv
+security_audit_report.csv
