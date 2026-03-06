@@ -6,6 +6,7 @@ pragma solidity ^0.8.20;
 import {IERC20Pool} from "./interfaces/pool/erc20/IERC20Pool.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IPoolInfoUtils} from "./interfaces/IPoolInfoUtils.sol";
 import {ILVToken} from "./interfaces/ILVToken.sol";
@@ -25,6 +26,8 @@ interface ILVLidoVault {
 }
 
 contract LiquidationProxy is Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
     IERC20Pool public pool;
     IPoolInfoUtils public constant poolInfoUtils = IPoolInfoUtils(0x30c5eF2997d6a882DE52c4ec01B6D0a5e5B4fAAE);
     uint256 constant MIN_BOND_FACTOR = 0.005 * 1e18;
@@ -306,9 +309,8 @@ contract LiquidationProxy is Ownable, ReentrancyGuard {
         require(bondAmount > 0, "No bond to claim");
         // Reset kicker state
         kickerAmount[msg.sender] = 0;
-        // Transfer bond to user
-        // console.log("WETH Balance", IERC20(quoteToken).balanceOf(address(this)));
-        IERC20(quoteToken).transfer(msg.sender, bondAmount);
+        // Transfer bond to user using SafeERC20 (reverts on failure)
+        IERC20(quoteToken).safeTransfer(msg.sender, bondAmount);
         return bondAmount;
     }
 }
