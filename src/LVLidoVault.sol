@@ -453,9 +453,8 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         // Note Accounting, lender fees deducted here
         totalLenderQTUtilized += totalPostFeeDepositAmount;
         if (totalPreFeeAmountToDeposit > totalLenderQTUnutilized) {
-            uint256 originalValue = totalLenderQTUnutilized;
+            emit AccountingDrift("totalLenderQTUnutilized", totalLenderQTUnutilized, totalPreFeeAmountToDeposit);
             totalLenderQTUnutilized = 0;
-            emit AccountingDrift("totalLenderQTUnutilized", originalValue, totalPreFeeAmountToDeposit);
         } else {
             totalLenderQTUnutilized -= totalPreFeeAmountToDeposit;
         }
