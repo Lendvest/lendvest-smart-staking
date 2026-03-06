@@ -190,17 +190,28 @@ contract LVLidoVaultUtilRescue {
         uint256 newTotalBorrowerCTUnutilized = LVLidoVault.totalBorrowerCTUnutilized();
         uint256 currentEpoch = LVLidoVault.epoch();
 
+        // Cache denominators to prevent division by zero
+        uint256 totalLenderUtilized = LVLidoVault.totalLenderQTUtilized();
+        uint256 totalBorrowerUtilized = LVLidoVault.totalBorrowerCT() - LVLidoVault.totalBorrowerCTUnutilized();
+
         // Process lender and borrower matches
         VaultLib.MatchInfo[] memory matches = LVLidoVault.getEpochMatches(currentEpoch);
         for (uint256 i = 0; i < matches.length; i++) {
             VaultLib.MatchInfo memory match_ = matches[i];
 
-            uint256 newLenderQuoteAmount = (
-                (match_.quoteAmount + match_.reservedQuoteAmount) * matchedLendersOwed
-            ) / LVLidoVault.totalLenderQTUtilized();
+            // Safe division: if denominator is 0, set amount to 0 (no distribution possible)
+            uint256 newLenderQuoteAmount = 0;
+            if (totalLenderUtilized > 0) {
+                newLenderQuoteAmount = (
+                    (match_.quoteAmount + match_.reservedQuoteAmount) * matchedLendersOwed
+                ) / totalLenderUtilized;
+            }
 
-            uint256 newBorrowerCTAmount = (match_.collateralAmount * matchedBorrowersOwed)
-                / (LVLidoVault.totalBorrowerCT() - LVLidoVault.totalBorrowerCTUnutilized());
+            uint256 newBorrowerCTAmount = 0;
+            if (totalBorrowerUtilized > 0) {
+                newBorrowerCTAmount = (match_.collateralAmount * matchedBorrowersOwed)
+                    / totalBorrowerUtilized;
+            }
 
             LVLidoVault.lenderOrdersPush(VaultLib.LenderOrder(match_.lender, newLenderQuoteAmount, 0));
             LVLidoVault.borrowerOrdersPush(VaultLib.BorrowerOrder(match_.borrower, newBorrowerCTAmount));
@@ -241,7 +252,12 @@ contract LVLidoVaultUtilRescue {
 
         for (uint256 i = 0; i < clOrders.length; i++) {
             VaultLib.CollateralLenderOrder memory clOrder = clOrders[i];
-            uint256 newCLCollateralAmount = (clOrder.collateralAmount * matchedCollateralLendersOwed) / totalCLDeposits;
+
+            // Safe division: if totalCLDeposits is 0, set amount to 0 (no distribution possible)
+            uint256 newCLCollateralAmount = 0;
+            if (totalCLDeposits > 0) {
+                newCLCollateralAmount = (clOrder.collateralAmount * matchedCollateralLendersOwed) / totalCLDeposits;
+            }
 
             LVLidoVault.collateralLenderOrdersPush(
                 VaultLib.CollateralLenderOrder(clOrder.collateralLender, newCLCollateralAmount)
