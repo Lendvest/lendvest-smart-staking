@@ -34,6 +34,10 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
     // Exactly three collateral-lender tranches; when the counter reaches 3 we switch to allowKick.
     uint256 public constant MAX_TRANCHES = 3;
     uint256 public constant lidoClaimDelay = 7 days;
+    uint256 public constant PRICE_STALENESS_THRESHOLD = 1 hours;
+
+    error StalePrice(uint256 updatedAt, uint256 currentTime);
+    error InvalidPrice(int256 price);
 
     // Rate is set by the LVLidoVault contract
     uint256 public upperBoundRate = 0;
@@ -79,12 +83,27 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
 
     function getWstethToWeth(uint256 _amount) public view returns (uint256) {
         // WSTETH -> STETH -> USD -> ETH -> USD -> WETH
-        (, int256 stethPrice,,,) = stethUsdPriceFeed.latestRoundData();
+        (, int256 stethPrice,,uint256 stethUpdatedAt,) = stethUsdPriceFeed.latestRoundData();
+        if (block.timestamp - stethUpdatedAt > PRICE_STALENESS_THRESHOLD) {
+            revert StalePrice(stethUpdatedAt, block.timestamp);
+        }
+        if (stethPrice <= 0) {
+            revert InvalidPrice(stethPrice);
+        }
+
         uint256 stethAmount = _amount * IWsteth(VaultLib.COLLATERAL_TOKEN).stEthPerToken() / 1e18;
         // STETH -> USD
         uint256 stethValueScaled = stethAmount * uint256(stethPrice);
+
         // USD -> ETH = WETH
-        (, int256 ethPrice,,,) = ethUsdPriceFeed.latestRoundData();
+        (, int256 ethPrice,,uint256 ethUpdatedAt,) = ethUsdPriceFeed.latestRoundData();
+        if (block.timestamp - ethUpdatedAt > PRICE_STALENESS_THRESHOLD) {
+            revert StalePrice(ethUpdatedAt, block.timestamp);
+        }
+        if (ethPrice <= 0) {
+            revert InvalidPrice(ethPrice);
+        }
+
         return stethValueScaled / uint256(ethPrice);
     }
 
