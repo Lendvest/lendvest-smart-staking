@@ -13,3 +13,5 @@ node_modules/
 
 audit_findings.csv
 security_audit_report.csv
+NOTES.md
+report.md
