@@ -447,7 +447,10 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         // This amount backs 50% of the borrowed debt (inverseBorrowCLAmount = 2)
         uint256 clUtilized = (((borrowAmountMatched * 1e18) / epochStartRedemptionRate) / inverseBorrowCLAmount);
         totalCLDepositsUtilized += clUtilized;
-        
+        // Track remaining unmatched CL for graduated liquidation protection (tranches).
+        // totalCollateralLenderCT was decremented by utilized amounts in the loop above,
+        // so it now holds exactly the unmatched CL remainder available for avoidLiquidation().
+        totalCLDepositsUnutilized = totalCollateralLenderCT;
 
         // Deposit lender utilized amounts
         if (
@@ -1571,6 +1574,14 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
 
         // Update global collateral lender total - only subtract principal, not interest
         totalCollateralLenderCT -= userPrincipalAmount;
+
+        // Keep totalCLDepositsUnutilized consistent so avoidLiquidation() doesn't overcount.
+        // Clamp to avoid underflow if CL was deposited mid-epoch (not part of epoch-start pool).
+        if (userPrincipalAmount <= totalCLDepositsUnutilized) {
+            totalCLDepositsUnutilized -= userPrincipalAmount;
+        } else {
+            totalCLDepositsUnutilized = 0;
+        }
 
         // Decrement user's active order count
         if (userActiveOrderCount[msg.sender] >= ordersRemoved) {
