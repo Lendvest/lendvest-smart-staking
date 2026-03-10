@@ -574,7 +574,7 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
         LVLidoVault.setEmergencyLenderState(
             targetEpoch, true, principalRemaining - userPrincipal, claimableRemaining - amount
         );
-        LVLidoVault.transferForProxy(VaultLib.QUOTE_TOKEN, msg.sender, amount);
+        require(LVLidoVault.transferForProxy(VaultLib.QUOTE_TOKEN, msg.sender, amount), "Transfer failed");
 
         emit VaultLib.EmergencyAaveLenderClaimed(msg.sender, targetEpoch, userPrincipal, amount);
         return amount;
@@ -611,7 +611,7 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
         );
         // Keep totalCollateralLenderCT consistent with principal leaving the vault.
         LVLidoVault.setTotalCollateralLenderCT(LVLidoVault.totalCollateralLenderCT() - userPrincipal);
-        LVLidoVault.transferForProxy(VaultLib.COLLATERAL_TOKEN, msg.sender, amount);
+        require(LVLidoVault.transferForProxy(VaultLib.COLLATERAL_TOKEN, msg.sender, amount), "Transfer failed");
 
         emit VaultLib.EmergencyAaveCLClaimed(msg.sender, targetEpoch, userPrincipal, amount);
         return amount;

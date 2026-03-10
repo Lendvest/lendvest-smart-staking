@@ -190,7 +190,7 @@ contract LiquidationProxy is Ownable, ReentrancyGuard {
         emit KickByVault(msg.sender, bondAmount);
     }
 
-    function take(uint256 collateralToPurchase) external returns (uint256) {
+    function take(uint256 collateralToPurchase) external nonReentrant returns (uint256) {
         // Get auction price and calculate quote token amount needed
         (,, uint256 debtToCover,, uint256 auctionPrice,,,,) = auctionStatus();
         require(debtToCover > 0, "Auction not ongoing.");

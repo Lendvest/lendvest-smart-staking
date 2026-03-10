@@ -185,7 +185,7 @@ contract LVLidoVaultUtilRescue {
         uint256 matchedBorrowersOwed,
         uint256 matchedCollateralLendersOwed
     ) internal {
-        uint256 totalLenderQTUnutilizedToAdjust;
+        uint256 totalLenderQTUnutilizedToAdjust = 0;
         uint256 newTotalBorrowerCT = LVLidoVault.totalBorrowerCT();
         uint256 newTotalBorrowerCTUnutilized = LVLidoVault.totalBorrowerCTUnutilized();
         uint256 currentEpoch = LVLidoVault.epoch();
