@@ -1149,6 +1149,8 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
             return testQuoteToken.mint(receiver, amount);
         } else if (token == address(testCollateralToken)) {
             return testCollateralToken.mint(receiver, amount);
+        } else {
+            revert VaultLib.InvalidInput();
         }
     }
 
@@ -1164,6 +1166,8 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
             return testQuoteToken.burn(receiver, amount);
         } else if (token == address(testCollateralToken)) {
             return testCollateralToken.burn(receiver, amount);
+        } else {
+            revert VaultLib.InvalidInput();
         }
     }
 
