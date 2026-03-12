@@ -15,3 +15,5 @@ audit_findings.csv
 security_audit_report.csv
 NOTES.md
 report.md
+.claude
+BUG_BOUNTY_SCOPE.md
