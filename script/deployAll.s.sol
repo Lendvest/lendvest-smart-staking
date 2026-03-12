@@ -25,6 +25,12 @@ import {LVLidoVaultUpkeeper} from "../src/LVLidoVaultUpkeeper.sol";
  *      4. Have sufficient ETH for gas (~0.2 ETH)
  *      5. After deployment: update frontend lvLidoVault.ts with new addresses
  *      6. After deployment: create new Chainlink subscriptions
+ *
+ * @dev DEPLOY COMMAND (with auto-verification):
+ *      forge script script/deployAll.s.sol:DeployAll \
+ *          --rpc-url $RPC_URL \
+ *          --private-key $PRIVATE_KEY \
+ *          --broadcast --verify -vvv
  */
 contract DeployAll is Script {
     // =============================================================
@@ -32,7 +38,7 @@ contract DeployAll is Script {
     // =============================================================
     // INCREMENT THIS FOR EVERY NEW DEPLOYMENT
     // This ensures unique token names and prevents address confusion
-    uint256 public constant DEPLOYMENT_VERSION = 7;
+    uint256 public constant DEPLOYMENT_VERSION = 8;
 
     // =============================================================
     //                    ACCESS CONTROL
@@ -40,7 +46,7 @@ contract DeployAll is Script {
     // Admin wallet that retains mint/burn access for rescue operations.
     // This wallet can later revoke its own access via setAllowed(self, false)
     // or renounce token ownership entirely via renounceOwnership().
-    address public constant ADMIN_WALLET = 0x5D42779C9412059b3EcA2F017e76BCa086921a69;
+    address public constant ADMIN_WALLET = 0x3F0976C7007F50b0BA5EFe00764fCFB251656D4f;
 
     // =============================================================
     //                    ETHEREUM MAINNET ADDRESSES
