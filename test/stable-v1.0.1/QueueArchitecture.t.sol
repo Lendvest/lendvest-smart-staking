@@ -110,10 +110,14 @@ contract QueueArchitectureTest is BaseStableTest {
      * @notice Test partial order fulfillment
      */
     function test_PartialOrderFulfillment() public {
-        // Large lender, small borrower - use balanced helper and add more lender
+        // More lender WETH than needed — tests that some lender funds remain unutilized
+        // Must also increase CL to support the extra matching capacity
         _setupBalancedOrders();
         address lender2 = makeAddr("lender2");
         _fundLender(lender2, 5 ether);
+        // Extra CL to prevent InsufficientFunds when more lender WETH drives larger flash loan
+        address cl2 = makeAddr("collateralLender2");
+        _fundCollateralLender(cl2, 3 ether);
 
         uint256 totalLenderBefore = vault.getLenderOrdersLength();
         console.log("Lender orders before:", totalLenderBefore);

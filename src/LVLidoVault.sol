@@ -60,6 +60,7 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     int256 public constant priceDifferencethreshold = -1e16; // -1%
     uint256 public constant MIN_ORDER_SIZE = 1e16; // 0.01 ETH - prevents storage bloat DoS
     uint256 public constant MAX_ORDERS_PER_USER = 10; // Prevents single actor from bloating arrays
+    uint256 public constant MAX_ORDERS_PER_EPOCH = 260; // Caps gas usage in epoch matching/close loops
     bool public epochStarted;
     bool private _borrowInitiated;
     bool public fundsQueued;
@@ -109,6 +110,7 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
 
     error OrderBelowMinimum(uint256 amount, uint256 minimum);
     error MaxOrdersExceeded(address user, uint256 current, uint256 max);
+    error EpochOrderCapReached();
 
     /**
      * @notice Constructor
@@ -1237,6 +1239,10 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         if (userActiveOrderCount[msg.sender] >= MAX_ORDERS_PER_USER) {
             revert MaxOrdersExceeded(msg.sender, userActiveOrderCount[msg.sender], MAX_ORDERS_PER_USER);
         }
+        // Anti-DoS: enforce global order cap to bound epoch matching gas
+        if (lenderOrders.length + borrowerOrders.length + collateralLenderOrders.length >= MAX_ORDERS_PER_EPOCH) {
+            revert EpochOrderCapReached();
+        }
         userActiveOrderCount[msg.sender]++;
 
         lenderOrders.push(VaultLib.LenderOrder({lender: msg.sender, quoteAmount: amount, vaultShares: 0}));
@@ -1284,6 +1290,10 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         if (userActiveOrderCount[msg.sender] >= MAX_ORDERS_PER_USER) {
             revert MaxOrdersExceeded(msg.sender, userActiveOrderCount[msg.sender], MAX_ORDERS_PER_USER);
         }
+        // Anti-DoS: enforce global order cap to bound epoch matching gas
+        if (lenderOrders.length + borrowerOrders.length + collateralLenderOrders.length >= MAX_ORDERS_PER_EPOCH) {
+            revert EpochOrderCapReached();
+        }
         userActiveOrderCount[msg.sender]++;
 
         totalBorrowerCT += collateralAmount;
@@ -1315,6 +1325,10 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
         // Anti-DoS: enforce max orders per user
         if (userActiveOrderCount[msg.sender] >= MAX_ORDERS_PER_USER) {
             revert MaxOrdersExceeded(msg.sender, userActiveOrderCount[msg.sender], MAX_ORDERS_PER_USER);
+        }
+        // Anti-DoS: enforce global order cap to bound epoch matching gas
+        if (lenderOrders.length + borrowerOrders.length + collateralLenderOrders.length >= MAX_ORDERS_PER_EPOCH) {
+            revert EpochOrderCapReached();
         }
         userActiveOrderCount[msg.sender]++;
 
