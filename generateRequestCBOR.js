@@ -25,7 +25,7 @@ async function main() {
   console.log("=== Chainlink Functions Request CBOR Generator ===\n");
 
   // --- Configuration ---
-  const sourceFilePath = path.resolve(__dirname, "./risck-script.js");
+  const sourceFilePath = path.resolve(__dirname, "./risk-script.js");
   const apiEndpoint = process.env.API_ENDPOINT || "https://api.nyccode.org/api/getproof";
 
   // --- Validate source file exists ---

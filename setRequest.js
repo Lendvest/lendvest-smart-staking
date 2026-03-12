@@ -48,7 +48,7 @@ async function main() {
   const fulfillGasLimit = 300000; // From createGist.js
   // const reserveAddress =
   //   "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".toLowerCase(); // WETH mainnet address
-  const sourceFilePath = path.resolve(__dirname, "./risck-script.js"); // Assumes script is in root
+  const sourceFilePath = path.resolve(__dirname, "./risk-script.js"); // Assumes script is in root
 
   // --- Error Handling ---
   if (!contractAddress || contractAddress === "YOUR_CONTRACT_ADDRESS") {
