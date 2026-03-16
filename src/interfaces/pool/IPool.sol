@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Author: Lendvest
 
-pragma solidity 0.8.20;
+pragma solidity ^0.8.20;
 
 import {IPoolBorrowerActions} from "./commons/IPoolBorrowerActions.sol";
 import {IPoolLPActions} from "./commons/IPoolLPActions.sol";

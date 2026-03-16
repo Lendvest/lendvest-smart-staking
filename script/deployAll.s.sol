@@ -38,7 +38,7 @@ contract DeployAll is Script {
     // =============================================================
     // INCREMENT THIS FOR EVERY NEW DEPLOYMENT
     // This ensures unique token names and prevents address confusion
-    uint256 public constant DEPLOYMENT_VERSION = 8;
+    uint256 public constant DEPLOYMENT_VERSION = 10;
 
     // =============================================================
     //                    ACCESS CONTROL

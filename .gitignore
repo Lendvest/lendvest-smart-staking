@@ -17,3 +17,7 @@ NOTES.md
 report.md
 .claude
 BUG_BOUNTY_SCOPE.md
+DEPLOYMENT_NOTES.md
+VERIFICATION_RUNBOOK.md
+*.txt
+.cbor-output.txt

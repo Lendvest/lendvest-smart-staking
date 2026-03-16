@@ -29,7 +29,7 @@ function hexToUint8Array(hex) {
 //   timeout: 9000,
 //   headers: {
 //     "Content-Type": "application/json",
-//     "x-api-key": "9747e9923a51b5270ae59708407dee4d753ce1945e7153d21202aa5175992d3e",
+//     "x-api-key": secrets.apiKey,
 //   },
 // });
 
