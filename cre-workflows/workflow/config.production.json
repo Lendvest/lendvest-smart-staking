@@ -1,0 +1,8 @@
+{
+  "schedule": "0 */5 * * * *",
+  "lvLidoVaultUtilAddress": "0x5f01bc229629342f1B94c4a84C43f30eF8ef76Fe",
+  "rateApiEndpoint": "https://api.nyccode.org/getproof",
+  "chainSelectorName": "ethereum-mainnet",
+  "gasLimit": "1000000",
+  "isTestnet": false
+}

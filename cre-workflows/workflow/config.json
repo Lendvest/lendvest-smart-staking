@@ -1,0 +1,8 @@
+{
+  "schedule": "*/30 * * * * *",
+  "lvLidoVaultUtilAddress": "0x6Db5E44db233A653e9A92913C6B1D4772C2dE4AE",
+  "rateApiEndpoint": "https://api.lendvest.finance/rates",
+  "chainSelectorName": "ethereum-testnet-sepolia",
+  "gasLimit": "1000000",
+  "isTestnet": true
+}

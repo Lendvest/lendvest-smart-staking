@@ -5,7 +5,8 @@ pragma solidity ^0.8.20;
 
 import {ILVLidoVault} from "./interfaces/ILVLidoVault.sol";
 import {LVLidoVaultUpkeeper} from "./LVLidoVaultUpkeeper.sol";
-import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
+// import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
+// COMMENTED OUT - Replaced by CRE
 import {FunctionsClient} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsClient.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
 import {IWsteth} from "./interfaces/vault/IWsteth.sol";
@@ -16,8 +17,15 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IWeth} from "./interfaces/vault/IWeth.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
-contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsClient {
+// CRE Report Receiver Interface (IReceiver per Chainlink CRE spec)
+interface IReceiver {
+    function onReport(bytes calldata metadata, bytes calldata report) external;
+}
+
+// contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsClient {
+contract LVLidoVaultUtil is IReceiver, IERC165, Ownable, FunctionsClient {
     using FunctionsRequest for FunctionsRequest.Request;
 
     ILVLidoVault public LVLidoVault;
@@ -81,6 +89,11 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
         _;
     }
 
+    /// @inheritdoc IERC165
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return interfaceId == type(IReceiver).interfaceId || interfaceId == type(IERC165).interfaceId;
+    }
+
     function getWstethToWeth(uint256 _amount) public view returns (uint256) {
         // WSTETH -> STETH -> USD -> ETH -> USD -> WETH
         (, int256 stethPrice,,uint256 stethUpdatedAt,) = stethUsdPriceFeed.latestRoundData();
@@ -107,7 +120,7 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
         return stethValueScaled / uint256(ethPrice);
     }
 
-    function checkUpkeep(bytes calldata) public view override returns (bool upkeepNeeded, bytes memory performData) {
+    function checkUpkeep(bytes calldata) public view returns (bool upkeepNeeded, bytes memory performData) {
         // Get the rate for the term if it has passed and auction hasn't happened (Ajna debt 0)
         IERC20Pool pool = LVLidoVault.pool();
         (uint256 debt,,,) = poolInfoUtils.borrowerInfo(address(pool), address(LVLidoVault));
@@ -213,7 +226,7 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
         return (upkeepNeeded, performData);
     }
 
-    function performUpkeep(bytes calldata performData) public override onlyForwarder {
+    function performUpkeep(bytes calldata performData) public onlyForwarder {
         if (performData.length == 0) revert VaultLib.InvalidInput();
         uint256 taskId = abi.decode(performData, (uint256));
         IERC20Pool pool = LVLidoVault.pool();
@@ -632,4 +645,48 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
         require(_flashLoanFeeBps <= 1000, "Flash loan fee too high");
         LVLidoVault.setMaxFlashLoanFeeThresholdProxy(_maxFeeBps, _flashLoanFeeBps);
     }
+
+        // ============================================================
+    // CRE REPORT RECEIVER
+    // ============================================================
+
+    /// @notice Event emitted when a CRE report is received
+    event CreReportReceived(uint256 indexed taskId, bytes metadata);
+
+    /**
+     * @notice CRE Report Receiver - entry point for Chainlink Runtime Environment
+     * @dev Called by CRE DON via writeReport. Decodes the report and dispatches
+     *      to the appropriate handler function based on task ID.
+     *
+     * Report encoding format:
+     * - taskId (uint256): The task to execute
+     *   - 0, 1, 2, 3, 221: Standard upkeep tasks (calls performTask internally)
+     *   - 221: Rate update task (decodes rate data and calls fulfillRateFromCRE)
+     * - For task 221, additional data:
+     *   - sumLiquidityRates_1e27 (uint256)
+     *   - sumVariableBorrowRates_1e27 (uint256)
+     *   - numRates (uint256)
+     *
+     * @param metadata CRE metadata (workflow info, timestamps, etc.)
+     * @param report The encoded report payload containing task ID and data
+     */
+    function onReport(bytes calldata metadata, bytes calldata report) external override {
+        // Decode the task ID from the report
+        if (report.length < 32) {
+            revert VaultLib.InvalidInput();
+        }
+
+        uint256 taskId = abi.decode(report, (uint256));
+        emit CreReportReceived(taskId, metadata);
+
+            // Check upkeep and perform if needed
+            (bool upkeepNeeded, bytes memory performData) = this.checkUpkeep("0x");
+            if (upkeepNeeded) {
+                // Temporarily allow this contract to call performUpkeep
+                address originalForwarder = s_forwarderAddress;
+                s_forwarderAddress = address(this);
+                this.performUpkeep(performData);
+                s_forwarderAddress = originalForwarder;
+            }
+        }
 }
