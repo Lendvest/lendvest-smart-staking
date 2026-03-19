@@ -5,9 +5,9 @@
     "": {
       "name": "lendvest-epoch-monitor",
       "dependencies": {
-        "@chainlink/cre-sdk": "0.0.8-alpha",
-        "viem": "2.34.0",
-        "zod": "3.25.76",
+        "@chainlink/cre-sdk": "^1.1.3",
+        "viem": "^2.23.4",
+        "zod": "^3.24.1",
       },
       "devDependencies": {
         "@types/bun": "1.2.21",
@@ -23,9 +23,9 @@
 
     "@bufbuild/protoplugin": ["@bufbuild/protoplugin@2.6.3", "", { "dependencies": { "@bufbuild/protobuf": "2.6.3", "@typescript/vfs": "^1.5.2", "typescript": "5.4.5" } }, "sha512-VceMuxeRukxGeABfo34SXq0VqY1MU+mzS+PBf0HAWo97ylFut8F6sQ3mV0tKiM08UQ/xQco7lxCn83BkoxrWrA=="],
 
-    "@chainlink/cre-sdk": ["@chainlink/cre-sdk@0.0.8-alpha", "", { "dependencies": { "@bufbuild/protobuf": "2.6.3", "@bufbuild/protoc-gen-es": "2.6.3", "@chainlink/cre-sdk-javy-plugin": "0.0.6-alpha", "@standard-schema/spec": "1.0.0", "viem": "2.34.0", "zod": "3.25.76" }, "bin": { "cre-compile": "bin/cre-compile.ts" } }, "sha512-lL+uE7LTn+PHEw5ciFMR6I5T3PUsZY3x7JX2L3w5+AAGC1kj/f59I2WHw7AGbo4VXS0c80MiKbuU8PVKMNPKrg=="],
+    "@chainlink/cre-sdk": ["@chainlink/cre-sdk@1.3.0", "", { "dependencies": { "@bufbuild/protobuf": "2.6.3", "@bufbuild/protoc-gen-es": "2.6.3", "@chainlink/cre-sdk-javy-plugin": "1.2.0", "@standard-schema/spec": "1.0.0", "viem": "2.34.0", "zod": "3.25.76" }, "bin": { "cre-compile": "bin/cre-compile.ts" } }, "sha512-t1eP9cSWzaKnwf/SpZTFq4JjEfZTqnwFlw3W8u/Fr66Q/x6APh2HH215xtDsAkN1qH2RKwHSx3YeZUXDWanyDg=="],
 
-    "@chainlink/cre-sdk-javy-plugin": ["@chainlink/cre-sdk-javy-plugin@0.0.6-alpha", "", { "bin": { "cre-setup": "bin/setup.ts", "cre-compile-workflow": "bin/compile-workflow.ts" } }, "sha512-iSHCeQVJpAiZ4rO0yR9QRb0dkqnBYGx515k745nGroexYri8MzYsh1qfr9w1XTxEdvWBBYOv6rNzq8bel/NvKg=="],
+    "@chainlink/cre-sdk-javy-plugin": ["@chainlink/cre-sdk-javy-plugin@1.2.0", "", { "bin": { "cre-setup": "bin/setup.ts", "cre-compile-workflow": "bin/compile-workflow.ts" } }, "sha512-xZuJ6oepjtsp+eUhfoUwCnNZy+HVkCZGEhXteDlHDZgYTrRUcM6Ddxg2qWyPa1sTdBArPeSqFINk9frnTrj5GA=="],
 
     "@noble/ciphers": ["@noble/ciphers@1.3.0", "", {}, "sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw=="],
 

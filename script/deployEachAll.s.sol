@@ -80,7 +80,7 @@ contract DeployEachAll is Script {
     // =============================================================
     //                    DEPLOYMENT VERSION
     // =============================================================
-    uint256 public constant DEPLOYMENT_VERSION = 11;
+    uint256 public constant DEPLOYMENT_VERSION = 12;
 
     // =============================================================
     //                    ACCESS CONTROL
