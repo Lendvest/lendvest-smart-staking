@@ -290,11 +290,40 @@ contract LVLidoVaultUtil is IReceiver, IERC165, Ownable, FunctionsClient {
                 && !updateRateNeeded && LVLidoVault.getAllowKick() == false
         ) {
             if (taskId == 1 && t1Debt > 0) {
+                // ============================================================
+                // TASKID=1: QUEUE LIDO WITHDRAWAL AND LOCK THE DEBT
+                // ============================================================
+                //
+                // CRITICAL FIX: Lock debt at request time to prevent timing mismatch
+                //
+                // WHY THIS MATTERS:
+                // - approxPercentFinalInterest includes +7 days (lidoClaimDelay) buffer
+                // - approxCTForClaim (wstETH amount) is sized based on this projected debt
+                // - If we don't STORE this debt value, taskId=2 will recalculate using
+                //   actual elapsed time, which may differ from our projection
+                //
+                // WHAT WE DO:
+                // 1. Calculate projected interest including Lido delay buffer
+                // 2. Store lockedDebt = totalBorrow * (1 + projectedInterest)
+                // 3. Size Lido withdrawal based on same projectedInterest
+                // 4. At taskId=2, use lockedDebt instead of recalculating
+                //
+                // This ensures: lockedDebt and claimAmount are always in sync
+                // ============================================================
+
                 uint256 approxPercentFinalInterest =
                     (LVLidoVault.rate() * ((block.timestamp - LVLidoVault.epochStart()) + lidoClaimDelay)) / 365 days;
                 uint256 stethPerWsteth = getWstethToWeth(1e18);
                 LVLidoVault.setCurrentRedemptionRate(stethPerWsteth);
                 emit VaultLib.RedemptionRateUpdated(stethPerWsteth);
+
+                // LOCK the debt at request time (in WETH terms)
+                // This MUST use the same approxPercentFinalInterest as approxCTForClaim
+                uint256 calculatedLockedDebt =
+                    (LVLidoVault.totalBorrowAmount() * (1e18 + uint256(approxPercentFinalInterest))) / 1e18;
+                LVLidoVault.setLockedDebt(calculatedLockedDebt);
+
+                // Calculate wstETH amount needed (uses same interest projection)
                 uint256 approxCTForClaim =
                     (LVLidoVault.totalBorrowAmount() * (1e18 + uint256(approxPercentFinalInterest))) / stethPerWsteth;
                 require(
@@ -303,7 +332,6 @@ contract LVLidoVaultUtil is IReceiver, IERC165, Ownable, FunctionsClient {
                     ),
                     "Approval failure."
                 );
-                // Todo: Debt exceeds borrower leveraged collateral + epoch collateralLender funds (utilized + unutilized)
                 uint256[] memory amounts = new uint256[](1);
                 amounts[0] = approxCTForClaim;
                 uint256 _requestId = LVLidoVault.requestWithdrawalsWstETH(amounts);

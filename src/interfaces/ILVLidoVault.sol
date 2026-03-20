@@ -33,8 +33,10 @@ interface ILVLidoVault {
     function claimWithdrawal() external;
     function depositEthForWeth(uint256 amount) external;
     function totalManualRepay() external view returns (uint256);
+    function lockedDebt() external view returns (uint256);
     function wethToWsteth(uint256 amount) external returns (uint256);
     function setTotalManualRepay(uint256 newTotal) external;
+    function setLockedDebt(uint256 amount) external;
     function testQuoteToken() external view returns (address);
     function mintForProxy(address token, address to, uint256 amount) external returns (bool);
     function totalLenderQTUtilized() external view returns (uint256);

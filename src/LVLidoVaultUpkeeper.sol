@@ -60,11 +60,44 @@ contract LVLidoVaultUpkeeper {
     function closeEpoch(uint256 t1Debt, uint256 collateral) external onlyUtil {
         IERC20Pool pool = LVLidoVault.pool();
 
-        // Determine actual debt based on elapsed time
+        // ============================================================
+        // RISK: TIMING MISMATCH BETWEEN LIDO REQUEST AND EPOCH CLOSE
+        // ============================================================
+        //
+        // PROBLEM (OLD CODE - COMMENTED OUT BELOW):
+        // - At taskId=1: Debt was PROJECTED with (elapsed + 7 days Lido delay)
+        // - At taskId=2: Debt was RECALCULATED with actual elapsed time
+        // - If Lido takes longer than 7 days, or any execution delay occurs:
+        //   actualDebt > claimAmount → REVERT with DebtGreaterThanAvailableFunds
+        //
+        // EXAMPLE:
+        // - Day 0: taskId=1 projects debt for 7 days, requests X wstETH from Lido
+        // - Day 9: taskId=2 executes (2 days late)
+        // - Old calculation: actualDebt = totalBorrow * (1 + rate * 9 days)
+        // - But Lido claim was sized for: debt = totalBorrow * (1 + rate * 7 days)
+        // - Result: actualDebt > claimAmount → TRANSACTION REVERTS
+        //
+        // SOLUTION (NEW CODE):
+        // - At taskId=1: Calculate debt AND STORE IT as lockedDebt
+        // - At taskId=2: USE the stored lockedDebt (no recalculation)
+        // - This ensures claimAmount always matches actualDebt
+        //
+        // RISK SHIFT:
+        // - If Lido is faster than 7 days: protocol gets slightly more (acceptable)
+        // - If Lido is slower than 7 days: protocol gets slightly less interest (acceptable)
+        // - Transaction NEVER reverts due to timing mismatch (critical fix)
+        // ============================================================
+
+        // timeElapsed is still needed for collateral lender interest calculation
         uint256 timeElapsed = block.timestamp - LVLidoVault.epochStart();
+
         uint256 actualDebt;
         if (t1Debt > 0) {
-            actualDebt = (LVLidoVault.totalBorrowAmount() * (1e18 + ((LVLidoVault.rate() * timeElapsed) / 365 days))) / 1e18;
+            // NEW: Use the locked debt from taskId=1 instead of recalculating
+            actualDebt = LVLidoVault.lockedDebt();
+
+            // OLD CODE (VULNERABLE TO TIMING MISMATCH):
+            // actualDebt = (LVLidoVault.totalBorrowAmount() * (1e18 + ((LVLidoVault.rate() * timeElapsed) / 365 days))) / 1e18;
         } else {
             actualDebt = 0;
         }

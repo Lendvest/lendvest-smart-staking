@@ -94,6 +94,33 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     uint256 public requestId;
     uint256 public totalManualRepay;
 
+    // ============================================================
+    // LOCKED DEBT: Fix for "borrower debt exceeds collateral" issue
+    // ============================================================
+    //
+    // PROBLEM:
+    // When Lido withdrawal is requested (taskId=1), we project debt including
+    // a 7-day buffer for Lido claim delay. But when epoch closes (taskId=2),
+    // the old code recalculated debt using actual elapsed time. If Lido takes
+    // longer than expected, or there's any execution delay:
+    //   actualDebt > claimAmount → DebtGreaterThanAvailableFunds REVERT
+    //
+    // SOLUTION:
+    // Store the projected debt at taskId=1 and reuse it at taskId=2.
+    // This ensures claimAmount (sized from lockedDebt) always matches actualDebt.
+    //
+    // LIFECYCLE:
+    // 1. Set at taskId=1 in LVLidoVaultUtil.performUpkeep()
+    // 2. Read at taskId=2 in LVLidoVaultUpkeeper.closeEpoch()
+    // 3. Reset to 0 in end_epoch() for next epoch
+    //
+    // RISK TRADE-OFF:
+    // - Lido faster than 7 days: protocol receives slightly more interest (good)
+    // - Lido slower than 7 days: protocol receives slightly less interest (acceptable)
+    // - Transaction NEVER reverts due to timing mismatch (critical improvement)
+    // ============================================================
+    uint256 public lockedDebt;
+
     // Anti-DoS: track active orders per user
     mapping(address => uint256) public userActiveOrderCount;
 
@@ -917,6 +944,7 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     function end_epoch() external onlyProxy {
         epochStarted = false;
         fundsQueued = false; // Reset withdrawal queue status
+        lockedDebt = 0; // Reset locked debt for next epoch
         lastEpochEnd = block.timestamp;
 
         emit VaultLib.EndEpoch(lastEpochEnd);
@@ -1016,6 +1044,16 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
      */
     function setTotalManualRepay(uint256 amount) external onlyProxy {
         totalManualRepay = amount;
+    }
+
+    /**
+     * @notice Sets the locked debt amount calculated at Lido request time.
+     * @dev Can only be called by the LVLidoVaultUtil or LiquidationProxy contract.
+     * @dev This value is set at taskId=1 and used at taskId=2 to prevent timing mismatch.
+     * @param amount The locked debt amount.
+     */
+    function setLockedDebt(uint256 amount) external onlyProxy {
+        lockedDebt = amount;
     }
 
     /**
