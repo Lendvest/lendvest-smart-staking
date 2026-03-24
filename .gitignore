@@ -22,3 +22,4 @@ VERIFICATION_RUNBOOK.md
 *.txt
 .cbor-output.txt
 decodeCBOR.js
+.internal-notes/

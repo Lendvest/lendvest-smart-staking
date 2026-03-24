@@ -192,15 +192,10 @@ contract LiquidationProxy is Ownable, ReentrancyGuard {
         (,, uint256 debtToCover,, uint256 auctionPrice,,,,) = auctionStatus();
         require(debtToCover > 0, "Auction not ongoing.");
 
-        // Internal implementation note tracked in .internal-notes/fixme-tracker.md
-        // We can't do that currently because we don't have the rate before the term ends
-        // For now, set total borrow amount to 0 if debt is paid off in full
         UD60x18 collateralAmount = wrap(collateralToPurchase);
         UD60x18 price = wrap(auctionPrice);
         UD60x18 quoteTokenPaymentUD60x18 = mul(collateralAmount, price);
         uint256 quoteTokenPayment = unwrap(quoteTokenPaymentUD60x18) + 1 wei;
-        // uint256 quoteTokenPayment = (collateralToPurchase * auctionPrice) / 1e18;
-
         require(
             LVLidoVault.mintForProxy(address(testQuoteToken), address(this), quoteTokenPayment)
                 && IERC20(address(testQuoteToken)).approve(address(pool), quoteTokenPayment),
@@ -214,13 +209,11 @@ contract LiquidationProxy is Ownable, ReentrancyGuard {
         UD60x18 transferAmountUD60x18 = mul(collateralTakenAmount, price);
         uint256 transferAmount = unwrap(transferAmountUD60x18);
 
-        // Internal implementation note tracked in .internal-notes/fixme-tracker.md
         require(
             IERC20(quoteToken).transferFrom(msg.sender, address(LVLidoVault), transferAmount),
             "Transfer from user failed"
         );
 
-        // console.log("LiqProxy Collateral Balance:", testCollateralToken.balanceOf(address(this)));
         require(
             LVLidoVault.transferForProxy(collateralToken, msg.sender, collateralTaken)
                 && LVLidoVault.burnForProxy(address(testCollateralToken), address(this), collateralTaken),
@@ -231,8 +224,6 @@ contract LiquidationProxy is Ownable, ReentrancyGuard {
         (uint256 kickTime,,,,,,,,) = auctionStatus();
         bool isBorrowerSettled;
         (,, debtToCover,,,,,,) = auctionStatus();
-        // console.log("debtToCover:", debtToCover);
-
         if (kickTime == 0) {
             // Remove bond
             (uint256 claimable, uint256 locked) = pool.kickerInfo(address(LVLidoVault));

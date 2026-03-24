@@ -43,10 +43,6 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
     uint256 public upperBoundRate = 0;
     uint256 public lowerBoundRate = 0;
 
-    // Receipt hash for cryptographic proof verification
-    // string public receiptHash;
-
-    // uint256 public rate = 221e14;
     bool public updateRateNeeded = true;
     uint256 public s_lastUpkeepTimeStamp;
     uint256 public s_requestCounter;
@@ -158,7 +154,7 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
                 tranchesToTrigger > 0 && tranchesToTrigger + collateralLenderTraunche <= MAX_TRANCHES
                     && totalCLDepositsUnutilized > 0
             ) {
-                // Equal-sized tranche approach (Josh): add 1/N of remaining protector funds
+                // Equal-sized tranche approach: add 1/N of remaining protector funds
                 uint256 remainingTranches = MAX_TRANCHES - collateralLenderTraunche;
                 if (remainingTranches == 0) remainingTranches = 1;
                 uint256 collateralToAddToPreventLiquidation =
@@ -256,7 +252,7 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
                 tranchesToTrigger > 0 && tranchesToTrigger + LVLidoVault.collateralLenderTraunche() <= MAX_TRANCHES
                     && LVLidoVault.totalCLDepositsUnutilized() > 0
             ) {
-                // Equal-sized tranche approach (Josh): add 1/N of remaining protector funds
+                // Equal-sized tranche approach: add 1/N of remaining protector funds
                 uint256 remainingTranches = MAX_TRANCHES - LVLidoVault.collateralLenderTraunche();
                 if (remainingTranches == 0) remainingTranches = 1;
                 uint256 collateralToAddToPreventLiquidation =
@@ -421,7 +417,6 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
         // Decode the aggregated rate data from Chainlink Functions
         (uint256 sumLiquidityRates_1e27, uint256 sumVariableBorrowRates_1e27, uint256 numRates) =
             abi.decode(response, (uint256, uint256, uint256));
-            // receiptHash = hash;
         // Ensure we have valid rate data to process
         // If numRates is 0, trigger fallback rate from Aave
         if (numRates == 0) {

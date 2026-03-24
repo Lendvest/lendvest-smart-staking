@@ -9,10 +9,10 @@ This repository is part of an active bug bounty program. We invite security rese
 **Severity Levels:**
 | Severity | Description | Reward Range |
 |----------|-------------|--------------|
-| Critical | Loss of user funds, unauthorized minting/burning, vault drainage | Up to $25,000 |
-| High | State manipulation, incorrect accounting, privilege escalation | Up to $10,000 |
-| Medium | Griefing attacks, DoS vectors, economic inefficiencies | Up to $5,000 |
-| Low | Gas optimizations, code quality, informational | Up to $1,000 |
+| Critical | Loss of user funds, unauthorized minting/burning, vault drainage | Up to $30,000 |
+| High | State manipulation, incorrect accounting, privilege escalation | Up to $5,000 |
+| Medium | Griefing attacks, DoS vectors, economic inefficiencies | Up to $1,500 |
+| Low | Gas optimizations, code quality, informational | Up to $500 |
 
 **Reporting:** Submit findings via [HackenProof](https://hackenproof.com) or email security@lendvest.io with a clear description, reproduction steps, and recommended fix.
 
@@ -20,7 +20,7 @@ This repository is part of an active bug bounty program. We invite security rese
 
 ## Protocol Overview
 
-LVLidoVault is a DeFi lending protocol that facilitates leveraged borrowing against Lido's Wrapped Staked Ether (wstETH). The vault orchestrates a matching engine between three participant types to create a capital-efficient lending market.
+LVLidoVault is a DeFi lending protocol that facilitates leveraged borrowing against Lido's Wrapped Staked Ether (wstETH). The vault orchestrates a matching engine between three participant types to create a capital-efficient lending market. Lendvest Smart Staking (LVLidoVault).
 
 ### Participants
 
@@ -190,6 +190,10 @@ forge test --match-test testFunctionName --fork-url $RPC_URL -vvvv
 | Ajna Pool (LVWSTETH/LVWETH) | [`0x4bb3e528dd71fc268fCb5AE7A19C88f9d4A85caC`](https://etherscan.io/address/0x4bb3e528dd71fc268fCb5AE7A19C88f9d4A85caC) |
 
 All contracts are verified on Etherscan. Source code matches this repository.
+
+## Known Issues
+
+See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for the full list of 24 known issues and 10 fixed issues documented for the bug bounty program. Bug bounty submissions reporting known issues will be considered out of scope.
 
 ## Known Design Decisions
 
