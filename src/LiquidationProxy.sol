@@ -252,7 +252,9 @@ contract LiquidationProxy is Ownable, ReentrancyGuard {
     }
 
     function getBondSize() public view returns (uint256) {
-        (uint256 debt, uint256 collateral, uint256 npTpRatio) = pool.borrowerInfo(address(LVLidoVault));
+        // Fix LENDVEST-132: use poolInfoUtils for accrued debt, pool for npTpRatio
+        (uint256 debt,,,) = poolInfoUtils.borrowerInfo(address(pool), address(LVLidoVault));
+        (,, uint256 npTpRatio) = pool.borrowerInfo(address(LVLidoVault));
         (, uint256 bondSize_) = _bondParams(debt, npTpRatio);
         return bondSize_ + 1 wei;
     }

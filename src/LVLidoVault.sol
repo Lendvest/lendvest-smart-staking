@@ -1632,16 +1632,14 @@ contract LVLidoVault is IMorphoFlashLoanCallback, Ownable {
     }
 
     function lenderKick(uint256 bondAmount) external onlyProxy {
-        if (
-            !(
-                liquidationProxy.allowKick() == true && testQuoteToken.mint(address(this), bondAmount)
-                    && IERC20(address(testQuoteToken)).approve(address(pool), bondAmount)
-            )
-        ) {
+        if (!(liquidationProxy.allowKick() == true && testQuoteToken.mint(address(this), bondAmount))) {
             revert VaultLib.TokenOperationFailed();
         }
 
+        // Approve max to absorb Ajna's intra-transaction interest accrual, then revoke
+        IERC20(address(testQuoteToken)).approve(address(pool), type(uint256).max);
         pool.lenderKick(currentBucketIndex, 7388);
+        IERC20(address(testQuoteToken)).approve(address(pool), 0);
     }
 
     function withdrawBondsForProxy() external onlyProxy returns (uint256) {
