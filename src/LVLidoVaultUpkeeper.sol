@@ -30,6 +30,11 @@ contract LVLidoVaultUpkeeper {
         _;
     }
 
+    modifier onlyVaultOwner() {
+        require(msg.sender == LVLidoVault.owner(), "Only owner");
+        _;
+    }
+
     constructor(address _LVLidoVault) {
         LVLidoVault = ILVLidoVault(_LVLidoVault);
     }
@@ -39,8 +44,7 @@ contract LVLidoVaultUpkeeper {
      * @dev Can only be called by the LVLidoVault owner
      * @param _util The address of the LVLidoVaultUtil contract
      */
-    function setLVLidoVaultUtil(address _util) external {
-        require(msg.sender == LVLidoVault.owner(), "Only owner");
+    function setLVLidoVaultUtil(address _util) external onlyVaultOwner {
         require(_util != address(0), "Invalid address");
         lvLidoVaultUtil = _util;
     }

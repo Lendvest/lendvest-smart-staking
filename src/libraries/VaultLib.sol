@@ -55,6 +55,7 @@ library VaultLib {
     event RequestRevertedWithErrorMsg(string reason);
     event RequestRevertedWithoutErrorMsg(bytes data);
     event LVLidoVaultUtilAddressUpdated(address oldAddress, address newAddress);
+    event LVLidoVaultUpkeeperAddressUpdated(address oldAddress, address newAddress);
     event LoanComposition(
         uint256 baseCollateral, uint256 leveragedCollateral, uint256 totalCollateral, uint256 quoteToBorrow
     );

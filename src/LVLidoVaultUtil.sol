@@ -326,9 +326,8 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
      * @dev Can only be called by the owner.
      * @param forwarderAddress The new forwarder address.
      */
-    function setForwarderAddress(address forwarderAddress) public {
-        require(msg.sender == LVLidoVault.owner(), "Only callable by LVLidoVault");
-        if (forwarderAddress == address(0)) revert VaultLib.InvalidInput(); // Zero address check for security
+    function setForwarderAddress(address forwarderAddress) public onlyOwner {
+        if (forwarderAddress == address(0)) revert VaultLib.InvalidInput();
         emit VaultLib.ForwarderAddressUpdated(s_forwarderAddress, forwarderAddress);
         s_forwarderAddress = forwarderAddress;
     }
@@ -338,8 +337,7 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
      * @dev Can only be called by the LVLidoVault owner
      * @param _upkeeper The address of the LVLidoVaultUpkeeper contract
      */
-    function setLVLidoVaultUpkeeper(address _upkeeper) public {
-        require(msg.sender == LVLidoVault.owner(), "Only callable by LVLidoVault");
+    function setLVLidoVaultUpkeeper(address _upkeeper) public onlyOwner {
         if (_upkeeper == address(0)) revert VaultLib.InvalidInput();
         lvLidoVaultUpkeeper = LVLidoVaultUpkeeper(_upkeeper);
     }
@@ -352,8 +350,7 @@ contract LVLidoVaultUtil is AutomationCompatibleInterface, Ownable, FunctionsCli
      * @param requestCBOR Bytes representing the CBOR-encoded FunctionsRequest.Request
      */
 
-    function setRequest(bytes memory requestCBOR, uint64 _subscriptionId, uint32 _fulfillGasLimit) external {
-        require(msg.sender == LVLidoVault.owner(), "Only callable by LVLidoVault");
+    function setRequest(bytes memory requestCBOR, uint64 _subscriptionId, uint32 _fulfillGasLimit) external onlyOwner {
         s_subscriptionId = _subscriptionId;
         s_fulfillGasLimit = _fulfillGasLimit;
         s_requestCBOR = requestCBOR;
