@@ -41,6 +41,32 @@ contract AutomationsIntegrationMainnetTest is BaseMainnetTest {
         vaultUtil.setForwarderAddress(address(0));
     }
 
+    function test_setLVLidoVaultUtilAddress_RevertIfZeroAddress() public {
+    // Deploy local version of the contract to test our fix
+    LVLidoVault localVault = new LVLidoVault(
+        address(ajnaPool),
+        address(liquidationProxy)
+    );
+
+    vm.expectRevert("Zero address not allowed");
+    localVault.setLVLidoVaultUtilAddress(address(0));
+}
+
+    function test_setLVLidoVaultUpkeeperAddress_EmitsEvent() public {
+        LVLidoVault localVault = new LVLidoVault(
+            address(ajnaPool),
+            address(liquidationProxy)
+        );
+
+        address newUpkeeper = makeAddr("newUpkeeper");
+
+        vm.expectEmit(false, false, false, true);
+        emit VaultLib.LVLidoVaultUpkeeperAddressUpdated(address(0), newUpkeeper);
+
+        vm.prank(localVault.owner());
+        localVault.setLVLidoVaultUpkeeperAddress(newUpkeeper);
+    }
+
     function test_SetRequestConfiguration() public {
         bytes memory requestCBOR = hex"1234";
         uint64 subscriptionId = 123;
